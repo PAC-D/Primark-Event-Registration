@@ -160,7 +160,7 @@ Sets `status = 'approved'`. Raises `NOT_FOUND` if the organisation does not exis
 ### 7.1 Fields, in this order
 
 1. **You are attending from** *(required)*: Supplier / Factory.
-2. **Supplier(s)** *(required, 1–10)*: a searchable multi-select of approved suppliers, plus an "Other – not in list" option.
+2. **Supplier(s)** *(required, 1–10)*: a searchable picker of approved suppliers. A **"+ Not in the list? Add a new supplier"** button sits below it. (It is a button rather than a last dropdown option because the picker's search would hide such an option.)
 3. **Factory(ies)** *(required, 1–10)*: the same, for factories.
 4. **Attendee name** *(required)*, **Email** *(required)*, **Phone** *(required)*.
 5. A hidden honeypot field named `website`.
@@ -207,7 +207,7 @@ Each selected organisation appears as a row with its name, a required **Code** b
 - `POST /api/admin/login { password }`. The server hashes the given password and `ADMIN_PASSWORD` with SHA-256 and compares them with `crypto.timingSafeEqual`.
 - **Success:** set the cookie `admin_session = <expiryUnixSeconds>.<hmacSha256(expiry, SESSION_SECRET)>`, with `HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`, plus `Secure` in production.
 - **Failure:** wait 1 second, then return 401.
-- `POST /api/admin/logout` clears the cookie.
+- `POST /api/admin/logout` clears the cookie. It needs no valid session, so an expired session can always log out.
 - Every other `/api/admin/*` route checks the signature and expiry and returns 401 if either fails. `SameSite=Strict` protects against cross-site request forgery.
 
 ### 8.2 Top bar
@@ -265,7 +265,7 @@ Every sheet has a bold header row, the header frozen, filters turned on, and col
 | GET `/api/organisations` | none | `{ event_title, organisations: [{id, kind, name, seats_used}] }`, approved organisations only |
 | POST `/api/register` | none | Body as in 6.1 plus a top-level `website` honeypot field. Returns 201 `{ id }` |
 | POST `/api/admin/login` | none | Section 8.1 |
-| POST `/api/admin/logout` | cookie | Clears the session |
+| POST `/api/admin/logout` | none | Clears the session |
 | GET `/api/admin/data` | cookie | Section 8.5 |
 | PUT `/api/admin/participants/:id` | cookie | Body as in 6.1 |
 | DELETE `/api/admin/participants/:id` | cookie | Deletes a participant |
@@ -291,38 +291,46 @@ Unexpected errors are logged in full with `console.error`, which appears in the 
 ## 10. Project structure
 
 ```
-api/index.js               Vercel function entry: export default app
-server.js                  local dev: app.listen(PORT || 3000)
+server.js                  Vercel zero-config Express entry: builds the app and default-exports it;
+                           when not on Vercel it also serves public/ and listens on PORT || 3000
 src/
-  app.js                   express.json, cookie parsing, routes, error handler
+  create-app.js            express.json, cookie parsing, routes, error handler
   config.js                read and check env vars; fail fast if any are missing
-  db.js                    Supabase client (secret key)
+  db.js                    Supabase client (secret key) + callRpc/runQuery helpers that throw AppErrors
   auth.js                  sign/verify session cookie, requireAdmin middleware
-  errors.js                map DB exception prefixes to AppError(code, status)
+  errors.js                AppError, DB error → AppError mapping, Express error handler
   routes/public.js
   routes/admin.js
   services/dashboard.js    build { summary, participants, organisations, pending }
   services/export.js       ExcelJS workbook from dashboard data
+  services/import.js       read the Excel list, insert organisations
 public/
+  index.html               registration page
+  admin.html               admin dashboard, served at /admin via cleanUrls
+  styles.css
+  js/api.js  js/registration-form.js  js/register.js  js/admin.js
   shared/validate.js       ES module, no dependencies, used by browser and server
-  index.html  register.js  styles.css
-  admin/index.html  admin/admin.js
+  shared/form-logic.js     seat hints, picker options, payload building, HTML escaping
+  shared/admin-filters.js  dashboard search and filters
 supabase/migrations/
   001_schema.sql           tables, indexes, RLS, make_match_key, org_status view
-  002_functions.sql        register/update/delete_attendee, approve_org, merge_org
-scripts/import-orgs.js     read xlsx → upsert (kind, name, source='list', status='approved'), ignoring rows whose (kind, match_key) already exists
-tests/
-vercel.json                /api/* → api/index.js; region sin1
-.env.example  .gitignore  package.json ("type": "module")
+  002_register.sql         private schema, prepare_registration, register_attendee
+  003_admin_functions.sql  update/delete_attendee, approve_org, merge_org
+scripts/import-orgs.js     command-line wrapper around services/import.js
+tests/unit  tests/api  tests/db  tests/helpers
+vercel.json                region sin1, cleanUrls
+.env.example  .env.test.example  .gitignore  package.json ("type": "module")
 ```
 
-Dependencies: `express`, `@supabase/supabase-js`, `exceljs`, `cookie-parser`, `dotenv` (development only), `supertest` (tests).
+Vercel serves `public/` from its CDN (`express.static` is ignored there) and runs `server.js` as one function.
+
+Dependencies: `express`, `@supabase/supabase-js`, `exceljs`, `cookie-parser`, and `supertest` for tests. Env files are loaded with Node's `--env-file` flag, so `dotenv` is not needed.
 
 Environment variables: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `ADMIN_PASSWORD`, `SESSION_SECRET` (at least 32 characters), `EVENT_TITLE`.
 
 ## 11. Deployment
 
-1. Create the Supabase production project in `ap-southeast-1` (Singapore). Apply `001` and `002`.
+1. Create the Supabase production project in `ap-southeast-1` (Singapore). Apply `001`, `002` and `003` in order.
 2. Run `npm run import-orgs -- "<path to xlsx>"`. It is safe to re-run.
 3. Push to GitHub, import into Vercel, set the environment variables. The function region is `sin1`.
 4. Smoke-test on the live URL (section 12.5).
