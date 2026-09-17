@@ -80,6 +80,40 @@ describe('admin database functions', { skip: skipReason }, () => {
       });
       assert.equal(error.message, 'NOT_FOUND');
     });
+
+    test('an attendee at an over-limit org (after merge anyway) can still be edited', async () => {
+      const f1 = await reg({ email: 'f1@example.com', orgs: [pick(o.padma), pick(o.aspire)] });
+      await reg({ email: 'f2@example.com', orgs: [pick(o.padma), pick(o.aspire)] });
+      await reg({ email: 'f3@example.com', orgs: [pick(o.padma), other('factory', 'Aspire Copy')] });
+      const source = await pendingOrg('aspire copy');
+      await check(db.rpc('merge_org', { p_source: source.id, p_target: o.aspire.id, p_allow_over_limit: true }));
+      assert.equal((await seats(db, o.aspire.id)).seats_used, 3);
+
+      await check(db.rpc('update_attendee', {
+        p_id: f1,
+        p: payload({ name: 'Renamed', email: 'f1@example.com', orgs: [pick(o.padma), pick(o.aspire)] }),
+      }));
+      const [row] = await check(db.from('attendees').select('name').eq('id', f1));
+      assert.equal(row.name, 'Renamed');
+
+      const f4 = await reg({ email: 'f4@example.com', orgs: [pick(o.padma), pick(o.windy)] });
+      const { error } = await db.rpc('update_attendee', {
+        p_id: f4,
+        p: payload({ email: 'f4@example.com', orgs: [pick(o.padma), pick(o.windy), pick(o.aspire)] }),
+      });
+      assert.equal(error.message, 'SEAT_FULL');
+      assert.deepEqual(JSON.parse(error.details), { side: 'factory', orgs: ['Aspire Garments (24040)'] });
+    });
+
+    test('only removes pending organisations the person was linked to', async () => {
+      const { unrelated } = await seedOrgs(db, { unrelated: { kind: 'factory', name: 'Unrelated Pending', status: 'pending', source: 'attendee' } });
+      const p = await reg({ orgs: [pick(o.padma), other('factory', 'Rainbow Knit Ltd')] });
+      await check(db.rpc('update_attendee', { p_id: p, p: payload({ orgs: [pick(o.padma), pick(o.aspire)] }) }));
+      assert.equal(await pendingOrg('rainbow knit'), undefined);
+      assert.ok(await pendingOrg(unrelated.match_key), 'an edit must not delete unrelated pending organisations');
+      await check(db.rpc('delete_attendee', { p_id: p }));
+      assert.ok(await pendingOrg(unrelated.match_key), 'a delete must not delete unrelated pending organisations');
+    });
   });
 
   describe('delete_attendee', () => {
@@ -132,6 +166,9 @@ describe('admin database functions', { skip: skipReason }, () => {
       assert.equal(refused.error.message, 'MERGE_OVER_LIMIT');
       assert.deepEqual(JSON.parse(refused.error.details), { target: 'Aspire Garments (24040)', side: 'factory', count: 3 });
       assert.ok(await pendingOrg('aspire copy'), 'source must remain after a refused merge');
+
+      const unset = await db.rpc('merge_org', { p_source: source.id, p_target: o.aspire.id, p_allow_over_limit: null });
+      assert.equal(unset.error?.message, 'MERGE_OVER_LIMIT', 'a NULL allow flag must count as false');
 
       const count = await check(db.rpc('merge_org', { p_source: source.id, p_target: o.aspire.id, p_allow_over_limit: true }));
       assert.equal(count, 3);

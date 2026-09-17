@@ -92,7 +92,7 @@ The rule is implemented once, as the `IMMUTABLE` SQL function `make_match_key(te
 ### 5.3 Seat rule
 
 - **Seats used** at organisation O = the number of attendees linked to O whose `from_type` equals `O.kind`.
-- A registration or edit is rejected if any organisation it would charge (selected, and of `kind = from_type`) already has 2 seats used, not counting the attendee being edited.
+- A registration is rejected if any organisation it would charge (selected, and of `kind = from_type`) already has 2 seats used. An edit is rejected only for organisations it would newly charge that already have 2 seats used, not counting the attendee being edited; organisations where the person already holds a seat on the same side are not re-checked, so edits still work after "merge anyway" has put an organisation over the limit.
 - **Participants** = the number of rows in `attendees`.
 
 ### 5.4 View: `org_status`
@@ -134,7 +134,7 @@ If any step fails, the whole transaction rolls back, **including any pending org
 Uses the same payload and steps as `register_attendee`, with these differences:
 - Raises `NOT_FOUND` if the attendee does not exist.
 - `org_id` may point to an **approved or pending** organisation, because admins are trusted and a person may still be linked to a pending one.
-- The seat count leaves out `p_id`'s own links.
+- The seat count leaves out `p_id`'s own links, and the seat check (step 5) only covers organisations the edit would newly charge. Organisations where the person already holds a seat on the same side (linked, current `from_type = kind`, and still charged after the edit) are not re-checked, so edits still work after "merge anyway".
 - It updates the attendee row (`updated_at = now()`), then replaces all of that person's `attendee_orgs` rows.
 - Afterwards it deletes any **pending** organisation that has no links left.
 
