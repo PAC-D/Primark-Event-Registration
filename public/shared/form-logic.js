@@ -7,11 +7,12 @@ export function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
 }
 
-// ownSeat: the person being edited already holds a seat here, so don't count it against them.
+// ownSeat: the person being edited already holds a seat here. The server does not re-check such
+// organisations, so they are never full for that person (even over the limit after "merge anyway").
 export function seatInfo(org, fromType, ownSeat = false) {
   if (!fromType || org.kind !== fromType) return { left: null, full: false, label: '' };
   const used = org.seats_used - (ownSeat ? 1 : 0);
-  const left = Math.max(0, SEAT_LIMIT - used);
+  const left = Math.max(ownSeat ? 1 : 0, SEAT_LIMIT - used);
   if (left === 0) return { left, full: true, label: '(full)' };
   return { left, full: false, label: `· ${left} seat${left === 1 ? '' : 's'} left` };
 }

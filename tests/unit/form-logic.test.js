@@ -23,6 +23,10 @@ test('seatInfo ignores the edited person\'s own seat', () => {
   assert.deepEqual(seatInfo(factory(1, 2), 'factory', true), { left: 1, full: false, label: '· 1 seat left' });
 });
 
+test('seatInfo never marks an org full where the person already holds a seat (e.g. after merge anyway)', () => {
+  assert.deepEqual(seatInfo(factory(1, 3), 'factory', true), { left: 1, full: false, label: '· 1 seat left' });
+});
+
 test('pickerOptions filters by kind, hides selected ones and disables full ones', () => {
   const orgs = [supplier(1, 2), factory(2, 2), factory(3, 0), factory(4, 1)];
   assert.deepEqual(
