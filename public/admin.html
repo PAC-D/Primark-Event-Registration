@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Admin – Registrations</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.6.2/dist/css/tom-select.default.min.css">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/tom-select@2.6.2/dist/js/tom-select.complete.min.js" defer></script>
+  <script type="module" src="/js/admin.js"></script>
+</head>
+<body>
+  <main class="page wide">
+    <section id="login" class="card narrow" hidden>
+      <h1>Admin login</h1>
+      <form id="login-form">
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <p class="alert" id="login-error" role="alert" hidden></p>
+        <button class="btn primary" type="submit">Log in</button>
+      </form>
+    </section>
+
+    <section id="dashboard" hidden>
+      <header class="toolbar">
+        <h1>Registrations</h1>
+        <div class="toolbar-actions">
+          <span class="muted" id="updated-at"></span>
+          <button class="btn" type="button" id="refresh">Refresh</button>
+          <button class="btn primary" type="button" id="export">Export to Excel</button>
+          <button class="btn" type="button" id="logout">Logout</button>
+        </div>
+      </header>
+      <p class="alert" id="dash-error" role="alert" hidden></p>
+      <div class="tiles" id="tiles"></div>
+      <nav class="tabs" role="tablist">
+        <button type="button" role="tab" data-tab="participants">Participants</button>
+        <button type="button" role="tab" data-tab="supplier">Suppliers</button>
+        <button type="button" role="tab" data-tab="factory">Factories</button>
+        <button type="button" role="tab" data-tab="pending">Pending new orgs</button>
+      </nav>
+      <div class="filters">
+        <input type="search" id="search" placeholder="Search…" aria-label="Search">
+        <div class="chips" id="chips"></div>
+      </div>
+      <div class="table-wrap" id="table"></div>
+    </section>
+  </main>
+  <dialog id="modal"><div id="modal-body"></div></dialog>
+</body>
+</html>
