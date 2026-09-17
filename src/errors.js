@@ -1,3 +1,5 @@
+import { SEAT_LIMIT } from '../public/shared/constants.js';
+
 export class AppError extends Error {
   constructor(code, status, message, extra = {}) {
     super(message);
@@ -40,7 +42,7 @@ export function fromDbError(error) {
       return new AppError(
         'SEAT_FULL',
         409,
-        `Already full (2 ${side} attendees): ${orgs.join('; ')}. Remove them or contact the event team.`,
+        `Already full (${SEAT_LIMIT} ${side} attendees): ${orgs.join('; ')}. Remove them or contact the event team.`,
       );
     }
     case 'DUPLICATE_EMAIL':
@@ -50,7 +52,7 @@ export function fromDbError(error) {
       return new AppError(
         'MERGE_OVER_LIMIT',
         409,
-        `${target} would have ${count} ${side} attendees (limit 2). Merge anyway?`,
+        `${target} would have ${count} ${side} attendees (limit ${SEAT_LIMIT}). Merge anyway?`,
         { count },
       );
     }

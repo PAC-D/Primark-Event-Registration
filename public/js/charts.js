@@ -1,4 +1,5 @@
 // Admin dashboard charts (Chart.js 4, loaded as window.Chart). The numbers come from /shared/chart-data.js.
+import { prefersReducedMotion } from './motion.js';
 import { COVERAGE_ORDER, coverageBreakdown, registrationTimeline } from '/shared/chart-data.js';
 import { escapeHtml } from '/shared/form-logic.js';
 
@@ -21,7 +22,6 @@ const charts = {};
 let timelinePoints = [];
 let coverageHandler = () => {};
 
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const shortDay = (day) => new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const longDay = (day) => new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
@@ -97,7 +97,7 @@ function renderTimeline(participants) {
     },
     options: {
       maintainAspectRatio: false,
-      animation: reducedMotion() ? false : { duration: 900, easing: 'easeOutQuart' },
+      animation: prefersReducedMotion() ? false : { duration: 900, easing: 'easeOutQuart' },
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
@@ -170,7 +170,7 @@ function renderCoverage(kind, organisations) {
       maintainAspectRatio: false,
       cutout: '68%',
       layout: { padding: 8 },
-      animation: reducedMotion() ? false : { animateRotate: true, animateScale: true, duration: 900, easing: 'easeOutQuart' },
+      animation: prefersReducedMotion() ? false : { animateRotate: true, animateScale: true, duration: 900, easing: 'easeOutQuart' },
       plugins: {
         legend: { display: false },
         tooltip: {

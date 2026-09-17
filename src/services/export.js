@@ -1,13 +1,13 @@
 import ExcelJS from 'exceljs';
+import { EVENT_TIME_ZONE } from '../../public/shared/constants.js';
 
-const TIME_ZONE = 'Asia/Dhaka';
 const SIDE = { supplier: 'Supplier', factory: 'Factory' };
 const REG_STATUS = { missing: 'Missing', registered: 'Registered', full: 'Full' };
 const ORG_STATUS = { approved: 'Approved', pending: 'Pending' };
 
 function dhakaParts(value) {
   const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: TIME_ZONE,
+    timeZone: EVENT_TIME_ZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -68,7 +68,7 @@ export function buildWorkbook(data) {
   const s = data.summary;
 
   addSheet(workbook, 'Summary', [['Item', 'item', 40], ['Value', 'value', 20]], [
-    { item: 'Exported at (Asia/Dhaka)', value: formatDhaka(data.generated_at) },
+    { item: `Exported at (${EVENT_TIME_ZONE})`, value: formatDhaka(data.generated_at) },
     { item: 'Participants', value: s.participants.total },
     { item: 'Participants from suppliers', value: s.participants.supplier },
     { item: 'Participants from factories', value: s.participants.factory },

@@ -1,5 +1,5 @@
 // Pure helpers for the registration form. No DOM access, so they can be unit tested in Node.
-export const SEAT_LIMIT = 2;
+import { SEAT_LIMIT } from './constants.js';
 
 const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
@@ -26,6 +26,9 @@ export function pickerOptions(orgs, { kind, fromType = null, selectedIds = new S
     });
 }
 
+// A row picked from the organisation list (as opposed to a typed "Not in the list" name).
+export const isListed = (row) => row.org_id !== undefined && row.org_id !== null;
+
 export function buildPayload({ fromType, name, email, phone, website = '', rows }) {
   return {
     from_type: fromType,
@@ -33,7 +36,7 @@ export function buildPayload({ fromType, name, email, phone, website = '', rows 
     email,
     phone,
     website,
-    orgs: rows.map((r) => (r.org_id != null
+    orgs: rows.map((r) => (isListed(r)
       ? { kind: r.kind, org_id: r.org_id, code: r.code }
       : { kind: r.kind, other_name: r.other_name, code: r.code })),
   };
