@@ -113,3 +113,11 @@ test('an unknown /api route returns 404 JSON', async () => {
   assert.equal(res.status, 404);
   assert.equal(res.body.error, 'NOT_FOUND');
 });
+
+test('GET / serves the registration page (Vercel does not map / to public/index.html)', async () => {
+  const res = await request(appWith(fakeDb())).get('/');
+  assert.equal(res.status, 200);
+  assert.match(res.headers['content-type'], /^text\/html/);
+  assert.match(res.text, /<title>Primark Event Registration<\/title>/);
+  assert.match(res.text, /src="\/js\/register\.js"/);
+});
