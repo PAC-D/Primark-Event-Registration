@@ -8,7 +8,8 @@ export class AppError extends Error {
 }
 
 const RECORD_GONE = 'That record no longer exists. Refresh and try again.';
-const RETRYABLE_PG_CODES = new Set(['40P01', '40001', '55P03', '57014']);
+// 23503: foreign-key race (an organisation removed mid-request); a retry gets a clear answer.
+const RETRYABLE_PG_CODES = new Set(['40P01', '40001', '55P03', '57014', '23503']);
 
 export const errors = {
   validation: (fields) => new AppError('VALIDATION', 400, 'Please check the highlighted fields.', { fields }),

@@ -18,6 +18,8 @@ export function publicRoutes({ db, config }) {
     const body = req.body ?? {};
     // Honeypot: people never see this field; bots fill it. Pretend success, save nothing.
     if (typeof body.website === 'string' && body.website.trim() !== '') {
+      const trimmed = (value) => (typeof value === 'string' ? value.trim() : '');
+      console.warn('Honeypot hit — registration discarded', { name: trimmed(body.name), email: trimmed(body.email) });
       return res.status(201).json({ id: null });
     }
     const result = validateRegistration(body);
