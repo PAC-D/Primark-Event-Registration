@@ -155,8 +155,9 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
   }
 
   // Field keys come from validateRegistration or the API: "name", "suppliers", "orgs.3.code", ...
-  function showFieldErrors(fields) {
-    const ordered = orderRows(state.rows);
+  // `ordered` must be the row order the server (or validateRegistration) actually indexed against —
+  // pass the snapshot taken at submit time, since state.rows can change while a request is in flight.
+  function showFieldErrors(fields, ordered = orderRows(state.rows)) {
     for (const [key, message] of Object.entries(fields)) {
       const rowMatch = key.match(/^orgs\.(\d+)/);
       const target = rowMatch
@@ -199,17 +200,21 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     clearErrors();
+    // Snapshot the row order used for this submission: state.rows can change while the request is
+    // in flight (pickers, remove and "+ Add new" stay interactive), so later error mapping must use
+    // this same order rather than recomputing it from the (possibly since-changed) live rows.
+    const submittedRows = orderRows(state.rows);
     const payload = buildPayload({
       fromType: state.fromType,
       name: field('name').value,
       email: field('email').value,
       phone: field('phone').value,
       website: field('website').value,
-      rows: orderRows(state.rows),
+      rows: submittedRows,
     });
     const result = validateRegistration(payload);
     if (!result.ok) {
-      showFieldErrors(result.fields);
+      showFieldErrors(result.fields, submittedRows);
       showAlert('Please check the highlighted fields.');
       return;
     }
@@ -218,7 +223,7 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
       await onSubmit(payload);
     } catch (err) {
       showAlert(err.message);
-      if (err.data?.fields) showFieldErrors(err.data.fields);
+      if (err.data?.fields) showFieldErrors(err.data.fields, submittedRows);
       if (err.code === 'SEAT_FULL' && reloadOrgs) {
         orgList = await reloadOrgs().catch(() => orgList);
         render();
