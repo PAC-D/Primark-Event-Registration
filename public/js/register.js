@@ -13,7 +13,10 @@ function showConfirmation(payload, orgs) {
 
   root.innerHTML = `
     <div class="confirmation" tabindex="-1">
-      <h2>You're registered ✓</h2>
+      <div class="success-badge" aria-hidden="true">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2>You're registered!</h2>
       <dl>
         <dt>Name</dt><dd>${escapeHtml(payload.name)}</dd>
         <dt>Email</dt><dd>${escapeHtml(payload.email)}</dd>
@@ -41,8 +44,8 @@ async function start() {
     return;
   }
 
-  document.title = `${data.event_title} – Registration`;
-  document.getElementById('event-title').textContent = data.event_title;
+  document.title = `Primark Event Registration – ${data.event_title}`;
+  document.getElementById('event-subtitle').textContent = data.event_title;
 
   mountRegistrationForm(root, {
     orgs: data.organisations,

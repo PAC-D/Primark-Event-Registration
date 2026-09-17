@@ -4,16 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Admin – Registrations</title>
+  <title>Primark Event Registration – Admin</title>
+  <link rel="icon" type="image/png" href="/brand/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.6.2/dist/css/tom-select.default.min.css" integrity="sha384-SHsvLe/18AiQC30hXizNPI6L6QhI2ckZ3g0cKEhAz+ZT9Pg/xvgXAnbsGRsWSI6V" crossorigin="anonymous">
   <link rel="stylesheet" href="/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/tom-select@2.6.2/dist/js/tom-select.complete.min.js" integrity="sha384-1mYKSrq1Nu5YJmWrIU9cvwWQlUyyukJJM9XMkAxY03nb/T69CK+Sn7rjFxVU3SSM" crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous" defer></script>
   <script type="module" src="/js/admin.js"></script>
 </head>
 <body>
+  <div class="bg-blobs" aria-hidden="true"><span></span><span></span><span></span></div>
   <main class="page wide">
-    <section id="login" class="card narrow" hidden>
-      <h1>Admin login</h1>
+    <header class="brand-bar anim-rise">
+      <img class="brand-logo pacd" src="/brand/pacd.png" alt="PacD" width="458" height="154">
+      <div class="brand-title">
+        <h1>Primark Event Registration</h1>
+        <p class="brand-sub">Admin dashboard</p>
+      </div>
+      <img class="brand-logo primark" src="/brand/primark.png" alt="Primark" width="2285" height="311">
+    </header>
+
+    <section id="login" class="card narrow anim-rise" style="--i: 1" hidden>
+      <h2>Admin login</h2>
       <form id="login-form">
         <div class="field">
           <label for="password">Password</label>
@@ -25,10 +40,12 @@
     </section>
 
     <section id="dashboard" hidden>
-      <header class="toolbar">
-        <h1>Registrations</h1>
-        <div class="toolbar-actions">
+      <header class="toolbar anim-rise" style="--i: 1">
+        <div class="toolbar-title">
+          <h2>Registrations</h2>
           <span class="muted" id="updated-at"></span>
+        </div>
+        <div class="toolbar-actions">
           <button class="btn" type="button" id="refresh">Refresh</button>
           <button class="btn primary" type="button" id="export">Export to Excel</button>
           <button class="btn" type="button" id="logout">Logout</button>
@@ -36,7 +53,45 @@
       </header>
       <p class="alert" id="dash-error" role="alert" hidden></p>
       <div class="tiles" id="tiles"></div>
-      <nav class="tabs" role="tablist">
+
+      <section class="charts" id="charts" aria-label="Charts">
+        <article class="chart-card chart-wide anim-rise" style="--i: 2">
+          <header>
+            <h3>Registrations over time</h3>
+            <p class="muted">Running total of participants by day (Dhaka time). Hover for daily numbers.</p>
+          </header>
+          <div class="chart-box"><canvas id="chart-timeline" role="img" aria-label="Line chart of the running total of registered participants by day"></canvas></div>
+          <p class="chart-empty muted" id="timeline-empty" hidden>No registrations yet.</p>
+        </article>
+        <article class="chart-card anim-rise" style="--i: 3">
+          <header>
+            <h3>Supplier coverage</h3>
+            <p class="muted">Click a slice or “View” to list those suppliers.</p>
+          </header>
+          <div class="donut-layout">
+            <div class="donut-box">
+              <canvas id="chart-supplier" role="img" aria-label="Donut chart of suppliers by registration status"></canvas>
+              <div class="donut-center" id="center-supplier"></div>
+            </div>
+            <ul class="chart-legend" id="legend-supplier"></ul>
+          </div>
+        </article>
+        <article class="chart-card anim-rise" style="--i: 4">
+          <header>
+            <h3>Factory coverage</h3>
+            <p class="muted">Click a slice or “View” to list those factories.</p>
+          </header>
+          <div class="donut-layout">
+            <div class="donut-box">
+              <canvas id="chart-factory" role="img" aria-label="Donut chart of factories by registration status"></canvas>
+              <div class="donut-center" id="center-factory"></div>
+            </div>
+            <ul class="chart-legend" id="legend-factory"></ul>
+          </div>
+        </article>
+      </section>
+
+      <nav class="tabs" id="tabs" role="tablist">
         <button type="button" role="tab" data-tab="participants">Participants</button>
         <button type="button" role="tab" data-tab="supplier">Suppliers</button>
         <button type="button" role="tab" data-tab="factory">Factories</button>

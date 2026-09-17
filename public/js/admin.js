@@ -1,4 +1,5 @@
 import { api } from './api.js';
+import { renderCharts } from './charts.js';
 import { mountRegistrationForm } from './registration-form.js';
 import { escapeHtml } from '/shared/form-logic.js';
 import { filterOrganisations, filterParticipants, filterPending } from '/shared/admin-filters.js';
@@ -14,6 +15,7 @@ let modalCleanup = null;
 const formatTime = (iso) => new Date(iso).toLocaleString('en-GB', {
   timeZone: 'Asia/Dhaka', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
 });
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---------- screens ----------
 
@@ -37,7 +39,15 @@ async function loadData() {
   $('#dash-error').hidden = true;
   $('#updated-at').textContent = `Updated ${formatTime(data.generated_at)}`;
   renderTiles();
-  renderTab();
+  renderCharts(data, { onCoverageClick: showCoverage });
+  renderTab({ animate: true });
+}
+
+// A chart slice or legend "View" opens the Suppliers/Factories tab filtered to that status.
+function showCoverage(kind, status) {
+  Object.assign(view, { tab: kind, status, side: 'all' });
+  renderTab({ animate: true });
+  $('#tabs').scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
 }
 
 // Runs an action; a 401 sends the admin back to the login screen, other errors show a message.
@@ -54,23 +64,49 @@ const refresh = () => guarded(loadData);
 
 // ---------- rendering ----------
 
+// Last number shown per tile counter, so a refresh counts from the previous value instead of from 0.
+const shownCounts = new Map();
+
+function countUp(element) {
+  const target = Number(element.dataset.count);
+  const key = element.dataset.countKey;
+  const start = shownCounts.get(key) ?? 0;
+  shownCounts.set(key, target);
+  if (reducedMotion() || start === target) {
+    element.textContent = String(target);
+    return;
+  }
+  const duration = 800;
+  const began = performance.now();
+  const step = (now) => {
+    const progress = Math.min(1, (now - began) / duration);
+    const eased = 1 - (1 - progress) ** 3;
+    element.textContent = String(Math.round(start + (target - start) * eased));
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  element.textContent = String(start);
+  requestAnimationFrame(step);
+}
+
 function renderTiles() {
   const s = data.summary;
-  const tile = (label, value, sub) =>
-    `<div class="tile"><div class="tile-label">${label}</div><div class="tile-value">${value}</div><div class="tile-sub">${sub}</div></div>`;
+  const counter = (key, value) => `<span data-count="${value}" data-count-key="${key}">${value}</span>`;
+  const tile = (index, label, value, sub) =>
+    `<div class="tile anim-rise" style="--i: ${index + 1}"><div class="tile-label">${label}</div><div class="tile-value">${value}</div><div class="tile-sub">${sub}</div></div>`;
   $('#tiles').innerHTML = [
-    tile('Participants', s.participants.total, `supplier ${s.participants.supplier} · factory ${s.participants.factory}`),
-    tile('Suppliers', `${s.suppliers.list_registered}/${s.suppliers.list_total}`, `missing ${s.suppliers.missing} · full ${s.suppliers.full}`),
-    tile('Factories', `${s.factories.list_registered}/${s.factories.list_total}`, `missing ${s.factories.missing} · full ${s.factories.full}`),
-    tile('Pending approvals', s.pending, 'new organisations'),
+    tile(0, 'Participants', counter('participants', s.participants.total), `supplier ${s.participants.supplier} · factory ${s.participants.factory}`),
+    tile(1, 'Suppliers', `${counter('suppliers', s.suppliers.list_registered)}/${s.suppliers.list_total}`, `missing ${s.suppliers.missing} · full ${s.suppliers.full}`),
+    tile(2, 'Factories', `${counter('factories', s.factories.list_registered)}/${s.factories.list_total}`, `missing ${s.factories.missing} · full ${s.factories.full}`),
+    tile(3, 'Pending approvals', counter('pending', s.pending), 'new organisations'),
   ].join('');
+  $('#tiles').querySelectorAll('[data-count]').forEach(countUp);
 }
 
 function table(headers, rows, emptyText) {
   if (!rows.length) return `<p class="muted empty">${emptyText}</p>`;
   return `<table>
     <thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
-    <tbody>${rows.map((cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+    <tbody>${rows.map((cells, i) => `<tr style="--i: ${Math.min(i, 15)}">${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
   </table>`;
 }
 
@@ -135,14 +171,21 @@ function renderChips() {
   $('#chips').innerHTML = chips.join('');
 }
 
-function renderTab() {
+// animate: fade the table in and cascade its rows (tab/filter changes and data loads, not every search keystroke).
+function renderTab({ animate = false } = {}) {
   document.querySelectorAll('[data-tab]').forEach((button) => {
     button.setAttribute('aria-selected', String(button.dataset.tab === view.tab));
   });
   renderChips();
-  $('#table').innerHTML = view.tab === 'participants' ? renderParticipants()
+  const tableWrap = $('#table');
+  tableWrap.classList.remove('tab-enter');
+  tableWrap.innerHTML = view.tab === 'participants' ? renderParticipants()
     : view.tab === 'pending' ? renderPending()
       : renderOrganisations(view.tab);
+  if (animate) {
+    void tableWrap.offsetWidth;
+    tableWrap.classList.add('tab-enter');
+  }
 }
 
 // ---------- dialogs ----------
@@ -301,10 +344,10 @@ document.addEventListener('click', (event) => {
   const d = button.dataset;
   if (d.tab) {
     Object.assign(view, { tab: d.tab, side: 'all', status: 'all' });
-    renderTab();
+    renderTab({ animate: true });
   } else if (d.chipGroup) {
     view[d.chipGroup] = d.chipValue;
-    renderTab();
+    renderTab({ animate: true });
   } else if (d.edit) openEdit(d.edit);
   else if (d.delete) confirmDelete(d.delete);
   else if (d.approve) guarded(async () => {
