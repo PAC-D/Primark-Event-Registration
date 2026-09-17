@@ -3,15 +3,15 @@ import { prefersReducedMotion } from './motion.js';
 import { COVERAGE_ORDER, coverageBreakdown, registrationTimeline } from '/shared/chart-data.js';
 import { escapeHtml } from '/shared/form-logic.js';
 
-// Validated with the dataviz palette checks against the card surface #f7fbff:
+// Validated with the dataviz palette checks against the glass card surface (about #f5f8fd):
 // the line colour passes the categorical gates; the coverage ramp passes the ordinal gates.
 const COLORS = {
   line: '#0a78bd',
   lineFill: 'rgba(10, 120, 189, 0.12)',
   coverage: { missing: '#5fb4df', registered: '#0a78bd', full: '#0b3f7a' },
-  surface: '#f7fbff',
-  ink: '#16264a',
-  muted: '#6b7a96',
+  surface: '#f5f8fd',
+  ink: '#101828',
+  muted: '#667085',
   grid: 'rgba(0, 43, 97, 0.08)',
   crosshair: 'rgba(0, 43, 97, 0.25)',
 };
@@ -33,8 +33,8 @@ const tooltipStyle = {
   borderWidth: 1,
   padding: 12,
   cornerRadius: 12,
-  titleFont: { weight: '800' },
-  bodyFont: { weight: '600' },
+  titleFont: { weight: '600' },
+  bodyFont: { weight: '500' },
   displayColors: false,
 };
 
@@ -220,7 +220,7 @@ export function renderCharts(data, { onCoverageClick }) {
     return;
   }
   coverageHandler = onCoverageClick;
-  window.Chart.defaults.font.family = '"Nunito", system-ui, sans-serif';
+  window.Chart.defaults.font.family = '"Inter", system-ui, sans-serif';
   window.Chart.defaults.color = COLORS.muted;
   renderTimeline(data.participants);
   renderCoverage('supplier', data.organisations);
