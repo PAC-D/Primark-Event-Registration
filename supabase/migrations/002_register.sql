@@ -87,13 +87,15 @@ begin
     end if;
   end loop;
 
-  -- Lock in id order so concurrent registrations queue instead of deadlocking.
+  -- Lock in id order. FOR NO KEY UPDATE serialises seat checks without blocking the
+  -- foreign-key checks (FOR KEY SHARE) of registrations from the other side, which
+  -- FOR UPDATE would deadlock against.
   perform 1
      from public.organisations o
     where o.id = any (v_ids)
       and o.kind = v_from
     order by o.id
-      for update;
+      for no key update;
 
   select jsonb_agg(o.name order by o.name) into v_full
     from public.organisations o
