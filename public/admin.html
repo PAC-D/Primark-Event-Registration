@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="/brand/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.6.2/dist/css/tom-select.default.min.css" integrity="sha384-SHsvLe/18AiQC30hXizNPI6L6QhI2ckZ3g0cKEhAz+ZT9Pg/xvgXAnbsGRsWSI6V" crossorigin="anonymous">
   <link rel="stylesheet" href="/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/tom-select@2.6.2/dist/js/tom-select.complete.min.js" integrity="sha384-1mYKSrq1Nu5YJmWrIU9cvwWQlUyyukJJM9XMkAxY03nb/T69CK+Sn7rjFxVU3SSM" crossorigin="anonymous" defer></script>
@@ -17,16 +17,17 @@
 </head>
 <body>
   <div class="bg-blobs" aria-hidden="true"><span></span><span></span><span></span></div>
-  <main class="page wide">
-    <header class="brand-bar anim-rise">
-      <img class="brand-logo pacd" src="/brand/pacd.png" alt="PacD" width="458" height="154">
+  <header class="brand-band wide">
+    <div class="brand-inner anim-rise">
+      <span class="logo-chip"><img class="brand-logo pacd" src="/brand/pacd.png" alt="PacD" width="458" height="154"></span>
       <div class="brand-title">
         <h1>Primark Event Registration</h1>
         <p class="brand-sub">Admin dashboard</p>
       </div>
       <img class="brand-logo primark" src="/brand/primark.png" alt="Primark" width="2285" height="311">
-    </header>
-
+    </div>
+  </header>
+  <main class="page wide">
     <section id="login" class="card narrow anim-rise" style="--i: 1" hidden>
       <h2>Admin login</h2>
       <form id="login-form">
