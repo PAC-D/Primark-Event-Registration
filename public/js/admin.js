@@ -201,6 +201,7 @@ function openEdit(id) {
       closeModal();
       await refresh();
     },
+    reloadOrgs: async () => (await api('/api/organisations')).organisations,
   });
   modalCleanup = () => form.destroy();
 }
