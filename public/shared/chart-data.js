@@ -1,12 +1,14 @@
 // Pure helpers that turn dashboard data into chart series. No DOM access, so they can be unit tested in Node.
+import { EVENT_TIME_ZONE } from './constants.js';
+
 const DAY_FORMAT = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Asia/Dhaka',
+  timeZone: EVENT_TIME_ZONE,
   year: 'numeric',
   month: '2-digit',
   day: '2-digit',
 });
 
-// 'YYYY-MM-DD' of the Asia/Dhaka calendar day the timestamp falls on.
+// 'YYYY-MM-DD' of the event-time-zone calendar day the timestamp falls on.
 export const dhakaDay = (iso) => DAY_FORMAT.format(new Date(iso));
 
 function nextDay(day) {

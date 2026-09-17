@@ -576,6 +576,8 @@ dialog::backdrop { background: rgba(0, 43, 97, 0.28); backdrop-filter: blur(4px)
 /* ---------- Small screens ---------- */
 
 @media (max-width: 760px) {
+  /* Continuously animating large blurred shapes can stutter on low-end phones: keep them still and lighter. */
+  .bg-blobs span { animation: none; filter: blur(40px); }
   .charts { grid-template-columns: minmax(0, 1fr); }
   .donut-layout { grid-template-columns: 150px 1fr; }
   .donut-box { height: 150px; }

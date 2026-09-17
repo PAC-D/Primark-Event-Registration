@@ -1,9 +1,10 @@
+import { SEAT_LIMIT } from '../../public/shared/constants.js';
 import { runQuery } from '../db.js';
 
 const KINDS = ['supplier', 'factory'];
 
 export function registrationStatus({ seats_used, linked_count }) {
-  if (seats_used >= 2) return 'full';
+  if (seats_used >= SEAT_LIMIT) return 'full';
   if (linked_count >= 1) return 'registered';
   return 'missing';
 }

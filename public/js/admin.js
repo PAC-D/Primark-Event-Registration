@@ -1,6 +1,8 @@
 import { api } from './api.js';
 import { renderCharts } from './charts.js';
+import { prefersReducedMotion } from './motion.js';
 import { mountRegistrationForm } from './registration-form.js';
+import { EVENT_TIME_ZONE, SEAT_LIMIT } from '/shared/constants.js';
 import { escapeHtml } from '/shared/form-logic.js';
 import { filterOrganisations, filterParticipants, filterPending } from '/shared/admin-filters.js';
 
@@ -13,9 +15,8 @@ let data = null;
 let modalCleanup = null;
 
 const formatTime = (iso) => new Date(iso).toLocaleString('en-GB', {
-  timeZone: 'Asia/Dhaka', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  timeZone: EVENT_TIME_ZONE, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
 });
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---------- screens ----------
 
@@ -44,10 +45,12 @@ async function loadData() {
 }
 
 // A chart slice or legend "View" opens the Suppliers/Factories tab filtered to that status.
+// The search box is cleared so the list shows exactly the organisations the chart counted.
 function showCoverage(kind, status) {
-  Object.assign(view, { tab: kind, status, side: 'all' });
+  Object.assign(view, { tab: kind, status, side: 'all', search: '' });
+  $('#search').value = '';
   renderTab({ animate: true });
-  $('#tabs').scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  $('#tabs').scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
 }
 
 // Runs an action; a 401 sends the admin back to the login screen, other errors show a message.
@@ -72,7 +75,7 @@ function countUp(element) {
   const key = element.dataset.countKey;
   const start = shownCounts.get(key) ?? 0;
   shownCounts.set(key, target);
-  if (reducedMotion() || start === target) {
+  if (prefersReducedMotion() || start === target) {
     element.textContent = String(target);
     return;
   }
@@ -138,7 +141,9 @@ function renderOrganisations(kind) {
     ['Name', 'Seats used', 'People', 'Status'],
     rows.map((o) => [
       `${escapeHtml(o.name)}${o.source === 'attendee' ? ' <span class="badge new">New</span>' : ''}`,
-      o.seats_used > 2 ? `${o.seats_used}/2 <span class="badge over">over limit</span>` : `${o.seats_used}/2`,
+      o.seats_used > SEAT_LIMIT
+        ? `${o.seats_used}/${SEAT_LIMIT} <span class="badge over">over limit</span>`
+        : `${o.seats_used}/${SEAT_LIMIT}`,
       peopleList(o.people),
       `<span class="badge ${o.reg_status}">${STATUS[o.reg_status]}</span>`,
     ]),
@@ -171,6 +176,12 @@ function renderChips() {
   $('#chips').innerHTML = chips.join('');
 }
 
+function renderTabContent() {
+  if (view.tab === 'participants') return renderParticipants();
+  if (view.tab === 'pending') return renderPending();
+  return renderOrganisations(view.tab);
+}
+
 // animate: fade the table in and cascade its rows (tab/filter changes and data loads, not every search keystroke).
 function renderTab({ animate = false } = {}) {
   document.querySelectorAll('[data-tab]').forEach((button) => {
@@ -179,9 +190,7 @@ function renderTab({ animate = false } = {}) {
   renderChips();
   const tableWrap = $('#table');
   tableWrap.classList.remove('tab-enter');
-  tableWrap.innerHTML = view.tab === 'participants' ? renderParticipants()
-    : view.tab === 'pending' ? renderPending()
-      : renderOrganisations(view.tab);
+  tableWrap.innerHTML = renderTabContent();
   if (animate) {
     void tableWrap.offsetWidth;
     tableWrap.classList.add('tab-enter');
@@ -285,7 +294,7 @@ function openMerge(id) {
     maxOptions: 500,
     options: data.organisations
       .filter((o) => o.kind === source.kind)
-      .map((o) => ({ value: String(o.id), text: `${o.name} (${o.seats_used}/2)` })),
+      .map((o) => ({ value: String(o.id), text: `${o.name} (${o.seats_used}/${SEAT_LIMIT})` })),
     // A warning (e.g. "Merge anyway?") belongs to the previous choice.
     onChange: () => {
       const box = $('#modal-error');

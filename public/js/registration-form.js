@@ -1,5 +1,5 @@
 import { MAX_ORGS_PER_KIND, validateRegistration } from '/shared/validate.js';
-import { buildPayload, escapeHtml, orderRows, pickerOptions, seatInfo } from '/shared/form-logic.js';
+import { buildPayload, escapeHtml, isListed, orderRows, pickerOptions, seatInfo } from '/shared/form-logic.js';
 
 const KINDS = [
   { kind: 'supplier', label: 'Supplier(s)', search: 'Search suppliers…', errorKey: 'suppliers' },
@@ -97,15 +97,21 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
   )]));
 
   function rowHtml(row, own) {
-    const listed = row.org_id != null;
+    const listed = isListed(row);
     const org = listed ? orgList.find((o) => o.id === row.org_id) : null;
     const full = org ? seatInfo(org, state.fromType, own.has(org.id)).full : false;
     const label = escapeHtml(row.name ?? `new ${row.kind}`);
+    // A listed org missing from the approved list is a pending one (admin edit only).
+    const pendingNote = listed && !org ? ' <em class="muted">(pending approval)</em>' : '';
+    const fullNote = full ? ' <strong class="warn-text">full</strong>' : '';
     const nameCell = listed
-      ? `<span class="org-name">${escapeHtml(row.name)}${org ? '' : ' <em class="muted">(pending approval)</em>'}${full ? ' <strong class="warn-text">full</strong>' : ''}</span>`
+      ? `<span class="org-name">${escapeHtml(row.name)}${pendingNote}${fullNote}</span>`
       : `<input data-field="other_name" maxlength="150" placeholder="New ${row.kind} name *" aria-label="New ${row.kind} name" value="${escapeHtml(row.other_name)}">`;
+    const classes = ['org-row'];
+    if (full) classes.push('is-full');
+    if (row.key === enteringKey) classes.push('is-entering');
     return `
-      <li class="org-row${full ? ' is-full' : ''}${row.key === enteringKey ? ' is-entering' : ''}" data-key="${row.key}">
+      <li class="${classes.join(' ')}" data-key="${row.key}">
         ${nameCell}
         <input data-field="code" maxlength="30" placeholder="Code *" aria-label="Code for ${label}" value="${escapeHtml(row.code)}">
         <button type="button" class="icon-btn" data-remove="${row.key}" aria-label="Remove ${label}">✕</button>
@@ -125,7 +131,7 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
         kind,
         fromType: state.fromType,
         ownSeatIds: own,
-        selectedIds: new Set(rows.filter((r) => r.org_id != null).map((r) => r.org_id)),
+        selectedIds: new Set(rows.filter(isListed).map((r) => r.org_id)),
       }));
       picker.refreshOptions(false);
 

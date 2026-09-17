@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPayload, escapeHtml, orderRows, pickerOptions, seatInfo } from '../../public/shared/form-logic.js';
+import { buildPayload, escapeHtml, isListed, orderRows, pickerOptions, seatInfo } from '../../public/shared/form-logic.js';
 
 const factory = (id, seats_used, name = `Factory ${id}`) => ({ id, kind: 'factory', name, seats_used });
 const supplier = (id, seats_used, name = `Supplier ${id}`) => ({ id, kind: 'supplier', name, seats_used });
@@ -67,4 +67,11 @@ test('orderRows puts suppliers before factories and keeps order within each kind
     { key: 1, kind: 'factory' }, { key: 2, kind: 'supplier' }, { key: 3, kind: 'factory' }, { key: 4, kind: 'supplier' },
   ];
   assert.deepEqual(orderRows(rows).map((r) => r.key), [2, 4, 1, 3]);
+});
+
+test('isListed is true only for rows picked from the list (org_id present, including 0)', () => {
+  assert.equal(isListed({ kind: 'supplier', org_id: 7 }), true);
+  assert.equal(isListed({ kind: 'supplier', org_id: 0 }), true);
+  assert.equal(isListed({ kind: 'supplier', org_id: null, other_name: 'New' }), false);
+  assert.equal(isListed({ kind: 'supplier', other_name: 'New' }), false);
 });

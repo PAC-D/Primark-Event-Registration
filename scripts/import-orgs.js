@@ -8,11 +8,17 @@ if (!filePath) {
   process.exit(1);
 }
 
-const orgs = await readAssignments(filePath);
-const suppliers = orgs.filter((o) => o.kind === 'supplier').length;
-const factories = orgs.length - suppliers;
-const { read, inserted } = await importOrganisations(createDb(loadConfig()), orgs);
+try {
+  const orgs = await readAssignments(filePath);
+  const suppliers = orgs.filter((o) => o.kind === 'supplier').length;
+  const factories = orgs.length - suppliers;
+  const { read, inserted } = await importOrganisations(createDb(loadConfig()), orgs);
 
-console.log(
-  `Read ${suppliers} suppliers and ${factories} factories; inserted ${inserted} new organisations (${read - inserted} already existed).`,
-);
+  console.log(
+    `Read ${suppliers} suppliers and ${factories} factories; inserted ${inserted} new organisations (${read - inserted} already existed).`,
+  );
+} catch (error) {
+  // Bad path, wrong headers, missing env vars or a database error: one readable line, no stack trace.
+  console.error(`Import failed: ${error.message}`);
+  process.exit(1);
+}
