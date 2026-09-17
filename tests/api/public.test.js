@@ -46,11 +46,24 @@ test('an invalid body returns 400 with field messages and never reaches the data
   assert.equal(db.calls.length, 0);
 });
 
-test('a filled honeypot returns 201 without saving', async () => {
+test('a filled honeypot returns 201 without saving', async (t) => {
+  t.mock.method(console, 'warn', () => {});
   const db = fakeDb();
   const res = await request(appWith(db)).post('/api/register').send({ ...body(), website: 'http://spam.example' });
   assert.equal(res.status, 201);
+  assert.deepEqual(res.body, { id: null });
   assert.equal(db.calls.length, 0);
+});
+
+test('a filled honeypot is logged with the name and email', async (t) => {
+  const warned = t.mock.method(console, 'warn', () => {});
+  const res = await request(appWith(fakeDb())).post('/api/register')
+    .send({ ...body(), email: ' bot@example.com ', website: 'http://spam.example' });
+  assert.equal(res.status, 201);
+  assert.equal(warned.mock.callCount(), 1);
+  const [message, details] = warned.mock.calls[0].arguments;
+  assert.equal(message, 'Honeypot hit — registration discarded');
+  assert.deepEqual(details, { name: 'Rahim Uddin', email: 'bot@example.com' });
 });
 
 test('SEAT_FULL from the database becomes 409 with a friendly message', async () => {

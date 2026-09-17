@@ -43,6 +43,10 @@ test('VALIDATION from the database becomes 400 with a field entry', () => {
 test('network failures and lock timeouts become 503, anything else 500', () => {
   assert.equal(fromDbError({ message: 'TypeError: fetch failed', details: '', hint: '', code: '' }).status, 503);
   assert.equal(fromDbError(dbError('deadlock detected', null, '40P01')).status, 503);
+  // Foreign-key race: the organisation was removed (e.g. merged) while a registration referenced it.
+  const fkRace = fromDbError(dbError('insert or update on table "attendee_orgs" violates foreign key constraint', null, '23503'));
+  assert.equal(fkRace.status, 503);
+  assert.equal(fkRace.code, 'DB_UNAVAILABLE');
   const other = fromDbError(dbError('relation "x" does not exist', null, '42P01'));
   assert.equal(other.status, 500);
   assert.equal(other.message, 'Something went wrong, please try again.');
