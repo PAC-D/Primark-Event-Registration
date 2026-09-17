@@ -243,11 +243,18 @@ function openMerge(id) {
     options: data.organisations
       .filter((o) => o.kind === source.kind)
       .map((o) => ({ value: String(o.id), text: `${o.name} (${o.seats_used}/2)` })),
+    // A warning (e.g. "Merge anyway?") belongs to the previous choice.
+    onChange: () => {
+      const box = $('#modal-error');
+      box.hidden = true;
+      box.innerHTML = '';
+    },
   });
   modalCleanup = () => picker.destroy();
 
-  const merge = async (allowOverLimit) => {
-    const targetId = Number(picker.getValue());
+  // targetIdOverride: "Merge anyway" merges the organisation the warning was about.
+  const merge = async (allowOverLimit, targetIdOverride) => {
+    const targetId = targetIdOverride ?? Number(picker.getValue());
     if (!targetId) { showModalError('Choose an organisation to merge into.'); return; }
     try {
       await api(`/api/admin/organisations/${source.id}/merge`, {
@@ -260,7 +267,7 @@ function openMerge(id) {
       if (err.status === 401) { showLogin(); return; }
       if (err.code === 'MERGE_OVER_LIMIT') {
         showModalError(`${escapeHtml(err.message)} <button type="button" class="btn small danger" id="merge-anyway">Merge anyway</button>`);
-        $('#merge-anyway').addEventListener('click', () => merge(true));
+        $('#merge-anyway').addEventListener('click', () => merge(true, targetId));
         return;
       }
       showModalError(escapeHtml(err.message));

@@ -32,7 +32,7 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
   const ownSeatIds = () => (initial && state.fromType === initial.from_type ? originalSeatIds : new Set());
 
   container.innerHTML = `
-    <form class="reg-form" novalidate>
+    <form class="reg-form" method="post" novalidate>
       <p class="alert" role="alert" hidden></p>
       <fieldset class="field">
         <legend>You are attending from <span class="req">*</span></legend>
