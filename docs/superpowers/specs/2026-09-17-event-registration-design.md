@@ -122,7 +122,7 @@ Steps:
    - `org_id` must exist with `status = 'approved'` and matching `kind`. Otherwise: `ORG_NOT_FOUND`.
    - `other_name`: compute `make_match_key`. If an organisation with that `(kind, match_key)` exists, whether approved or pending, use it. Otherwise `INSERT ... ON CONFLICT (kind, match_key) DO NOTHING` a new `source='attendee', status='pending'` row and select it. This is safe when two people type the same name at the same time.
 3. Remove duplicate resolved org ids. If the same org appears twice, the first entry's code is kept.
-4. Charged orgs = resolved orgs with `kind = from_type`. Lock them with `SELECT ... FROM organisations WHERE id = ANY(...) ORDER BY id FOR UPDATE`. The fixed order prevents deadlocks.
+4. Charged orgs = resolved orgs with `kind = from_type`. Lock them with `SELECT ... FROM organisations WHERE id = ANY(...) ORDER BY id FOR NO KEY UPDATE`. The fixed order prevents deadlocks. (`FOR NO KEY UPDATE` serialises seat checks without blocking the foreign-key checks of registrations from the other side, which `FOR UPDATE` would deadlock against.)
 5. Count seats used for each charged org. If any count is 2 or more, raise `SEAT_FULL` with the list of full organisation names.
 6. Insert the attendee. A unique violation on email is raised as `DUPLICATE_EMAIL`.
 7. Insert the `attendee_orgs` rows and return the attendee id.

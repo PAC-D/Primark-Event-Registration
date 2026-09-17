@@ -128,4 +128,34 @@ describe('register_attendee', { skip: skipReason }, () => {
     assert.ok(error);
     assert.equal((await check(db.from('attendees').select('id'))).length, 0);
   });
+
+  test('supplier-side and factory-side registrations over the same pairs run concurrently without deadlock', async () => {
+    const spec = {};
+    for (let i = 1; i <= 5; i += 1) {
+      spec[`sup${i}`] = { kind: 'supplier', name: `Concurrent Supplier ${i}` };
+      spec[`fac${i}`] = { kind: 'factory', name: `Concurrent Factory ${i}` };
+    }
+    const pairs = await seedOrgs(db, spec);
+
+    const jobs = [];
+    for (let i = 1; i <= 5; i += 1) {
+      const supplier = pairs[`sup${i}`];
+      const factory = pairs[`fac${i}`];
+      jobs.push(register(db, payload({
+        from: 'supplier', email: `cs${i}@example.com`, orgs: [pick(supplier), pick(factory)],
+      })));
+      jobs.push(register(db, payload({
+        from: 'factory', email: `cf${i}@example.com`, orgs: [pick(supplier), pick(factory)],
+      })));
+    }
+    const results = await Promise.all(jobs);
+
+    results.forEach((r, idx) => {
+      assert.equal(r.error, null, `job ${idx} failed: ${r.error?.code ?? ''} ${r.error?.message ?? ''}`.trim());
+    });
+    for (let i = 1; i <= 5; i += 1) {
+      assert.equal((await seats(db, pairs[`sup${i}`].id)).seats_used, 1);
+      assert.equal((await seats(db, pairs[`fac${i}`].id)).seats_used, 1);
+    }
+  });
 });
