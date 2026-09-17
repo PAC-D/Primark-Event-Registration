@@ -6,6 +6,7 @@ import {
 import { callRpc } from '../db.js';
 import { errors } from '../errors.js';
 import { loadDashboard } from '../services/dashboard.js';
+import { buildWorkbook, exportFilename } from '../services/export.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -44,6 +45,17 @@ export function adminRoutes({ db, config, loginDelayMs }) {
     const data = await loadDashboard(db);
     res.set('Cache-Control', 'no-store');
     res.json(data);
+  });
+
+  router.get('/export', async (_req, res) => {
+    const data = await loadDashboard(db);
+    const buffer = await buildWorkbook(data).xlsx.writeBuffer();
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${exportFilename(new Date(data.generated_at))}"`,
+      'Cache-Control': 'no-store',
+    });
+    res.send(Buffer.from(buffer));
   });
 
   router.put('/participants/:id', async (req, res) => {
