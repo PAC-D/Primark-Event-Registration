@@ -30,6 +30,8 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
     rows: initialLinks.map((o) => ({ key: ++nextKey, kind: o.kind, org_id: o.org_id, name: o.name, code: o.code })),
   };
   const ownSeatIds = () => (initial && state.fromType === initial.from_type ? originalSeatIds : new Set());
+  // The row added by the latest action slides in; every other re-rendered row stays still.
+  let enteringKey = null;
 
   container.innerHTML = `
     <form class="reg-form" method="post" novalidate>
@@ -103,7 +105,7 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
       ? `<span class="org-name">${escapeHtml(row.name)}${org ? '' : ' <em class="muted">(pending approval)</em>'}${full ? ' <strong class="warn-text">full</strong>' : ''}</span>`
       : `<input data-field="other_name" maxlength="150" placeholder="New ${row.kind} name *" aria-label="New ${row.kind} name" value="${escapeHtml(row.other_name)}">`;
     return `
-      <li class="org-row${full ? ' is-full' : ''}" data-key="${row.key}">
+      <li class="org-row${full ? ' is-full' : ''}${row.key === enteringKey ? ' is-entering' : ''}" data-key="${row.key}">
         ${nameCell}
         <input data-field="code" maxlength="30" placeholder="Code *" aria-label="Code for ${label}" value="${escapeHtml(row.code)}">
         <button type="button" class="icon-btn" data-remove="${row.key}" aria-label="Remove ${label}">✕</button>
@@ -131,6 +133,7 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
       if (atLimit) picker.disable(); else picker.enable();
       form.querySelector(`[data-add-other="${kind}"]`).disabled = atLimit;
     }
+    enteringKey = null;
   }
 
   function addListedRow(kind, orgId) {
@@ -138,6 +141,7 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
     if (!org || state.rows.some((r) => r.org_id === orgId)) return;
     const row = { key: ++nextKey, kind, org_id: org.id, name: org.name, code: '' };
     state.rows.push(row);
+    enteringKey = row.key;
     render();
     form.querySelector(`[data-key="${row.key}"] [data-field="code"]`)?.focus();
   }
@@ -151,6 +155,10 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
   function showAlert(message) {
     alertBox.textContent = message;
     alertBox.hidden = false;
+    // Restart the shake animation even when the same alert is shown twice in a row.
+    alertBox.classList.remove('shake');
+    void alertBox.offsetWidth;
+    alertBox.classList.add('shake');
     alertBox.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
@@ -184,14 +192,26 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
   form.addEventListener('click', (event) => {
     const remove = event.target.closest('[data-remove]');
     if (remove) {
-      state.rows = state.rows.filter((r) => r.key !== Number(remove.dataset.remove));
-      render();
+      const key = Number(remove.dataset.remove);
+      const item = remove.closest('.org-row');
+      let removed = false;
+      const finish = () => {
+        if (removed) return;
+        removed = true;
+        state.rows = state.rows.filter((r) => r.key !== key);
+        render();
+      };
+      // Let the row slide out first; the timeout covers browsers that skip animationend.
+      item.classList.add('is-leaving');
+      item.addEventListener('animationend', finish, { once: true });
+      setTimeout(finish, 300);
       return;
     }
     const add = event.target.closest('[data-add-other]');
     if (add) {
       const row = { key: ++nextKey, kind: add.dataset.addOther, other_name: '', code: '' };
       state.rows.push(row);
+      enteringKey = row.key;
       render();
       form.querySelector(`[data-key="${row.key}"] [data-field="other_name"]`)?.focus();
     }
