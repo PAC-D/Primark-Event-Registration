@@ -1,10 +1,10 @@
-# Primark Event Registration
+# Primark Carton Nomination Program — Registration
 
-Public registration form (max 2 people per supplier / factory per side) and an admin dashboard with Excel export.
-Design: `docs/superpowers/specs/2026-09-17-event-registration-design.md`.
+Public registration form (max 2 people per supplier, 1 per factory, per attending-from side) and an admin dashboard with Excel export.
+Design: `docs/superpowers/specs/2026-09-17-event-registration-design.md`, updated by `2026-09-25-carton-nomination-design.md`.
 
 ## Stack
-Express 5 on Vercel (`server.js`), plain HTML/JS in `public/`, Supabase Postgres (`supabase/migrations/`).
+Express 5 on a Node host (Amazon Lightsail, Ubuntu) via `server.js`, plain HTML/JS in `public/`, Supabase Postgres + Storage (`supabase/migrations/`).
 
 ## Environment variables
 | Name | Purpose |
@@ -13,7 +13,7 @@ Express 5 on Vercel (`server.js`), plain HTML/JS in `public/`, Supabase Postgres
 | `SUPABASE_SECRET_KEY` | Supabase secret key (server only) |
 | `ADMIN_PASSWORD` | Shared admin password |
 | `SESSION_SECRET` | 32+ random characters for signing the admin cookie |
-| `EVENT_TITLE` | Title shown on the form |
+| `EVENT_TITLE` | Subtitle shown under the event title (set to `Bangladesh Origin`) |
 
 Generate a session secret:
 ```bash
@@ -34,29 +34,67 @@ npm test                  # everything; needs .env.test pointing at the TEST pro
 ```
 
 ## Database
-Apply `supabase/migrations/001_schema.sql`, `002_register.sql`, `003_admin_functions.sql`, `004_hardening.sql` in order
+Apply `supabase/migrations/001_schema.sql`, `002_register.sql`, `003_admin_functions.sql`, `004_hardening.sql`, `005_carton_nomination.sql` in order
 (Supabase SQL Editor or the Supabase CLI/MCP).
-Put any future database change in a new numbered migration file (`005_...sql`); never edit a migration that has already been applied.
+Put any future database change in a new numbered migration file (`006_...sql`); never edit a migration that has already been applied.
+Migration `005` also creates the private `attendee-photos` storage bucket (1 MB, JPEG/PNG only) — only the server's secret key can touch it.
 
-## Import the supplier/factory list
-Sheet `Assignments` with headers `Supplier` and `Factory` in A1:B1. Safe to re-run.
+## Import the supplier/factory lists
+The canonical lists live in the repo: `scripts/data/suppliers.psv` and `scripts/data/factories.psv`,
+pipe-delimited `code|name` lines (names contain commas, so not CSV). Edit those files, then re-run — it is safe.
 ```bash
-node --env-file=.env.production scripts/import-orgs.js "path/to/Assignments.xlsx"
+node --env-file=.env.production scripts/import-orgs.js            # defaults to scripts/data
+node --env-file=.env.production scripts/import-orgs.js "dir"      # or a custom directory
 ```
+The import inserts new organisations, refreshes the codes of existing list organisations, and prunes
+list organisations that left the files unless an attendee is still linked to them.
 `.env.production` must contain all five environment variables (the config loader requires them), although the
 import only uses the Supabase values.
 
-## Deploy
-Import the GitHub repo into Vercel (Express is detected automatically), add the environment variables for both
-**Production** and **Preview**, deploy. `package.json` pins Node `24.x`.
-`vercel.json` pins the function region to `sin1`, serves `/admin` from `public/admin.html` and adds basic security headers.
+## Deploy (Amazon Lightsail, Ubuntu)
 
-Free Supabase projects pause after a period of inactivity. Keep the production project active (or on a paid plan)
-for the whole registration period.
+1. Install Node 24 (NodeSource or nvm), clone the repo, `npm ci`.
+2. `cp .env.example .env`, fill in the values against the **production** Supabase project.
+3. Apply all migrations (see Database below) and run `npm run import-orgs`.
+4. Run the server as a systemd unit (`/etc/systemd/system/primark-registration.service`):
+
+```ini
+[Unit]
+Description=Primark Carton Nomination registration
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/primark-registration
+ExecStart=/usr/bin/node --env-file=.env server.js
+Environment=NODE_ENV=production
+Restart=always
+User=primark
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`systemctl enable --now primark-registration`. The process serves everything (API + `public/`) on port 3000.
+
+5. Put nginx in front for HTTPS (`certbot --nginx`) and rate-limit the public endpoints:
+
+```nginx
+limit_req_zone $binary_remote_addr zone=register:10m rate=30r/m;
+limit_req_zone $binary_remote_addr zone=photos:10m  rate=10r/m;
+limit_req_zone $binary_remote_addr zone=admin:10m   rate=10r/m;
+
+server {
+  location /api/register     { limit_req zone=register burst=10 nodelay; proxy_pass http://127.0.0.1:3000; }
+  location /api/photos       { limit_req zone=photos   burst=5  nodelay; proxy_pass http://127.0.0.1:3000; }
+  location /api/admin/login  { limit_req zone=admin     burst=3  nodelay; proxy_pass http://127.0.0.1:3000; }
+  location /                  { proxy_pass http://127.0.0.1:3000; }
+}
+```
+
+Notes:
+- Photos uploaded through `/api/photos` but never submitted with a registration are deleted by a background sweeper in the server process (every 15 minutes, after 2 hours) — no cron job needed.
+- Free Supabase projects pause after a period of inactivity. Keep the production project active (or on a paid plan) for the whole registration period.
 
 ### Before sharing the link
-- In the Vercel dashboard (Firewall), add rate-limit rules:
-  - `POST /api/register`: generous, because many people at one factory can share an IP address (e.g. 30 requests per minute per IP).
-  - `POST /api/admin/login`: strict (e.g. 10 requests per minute per IP).
-- Use a long random `ADMIN_PASSWORD`.
+- Use a long random `ADMIN_PASSWORD` and `SESSION_SECRET` in `.env` (HTTPS via nginx makes the admin cookie `Secure`).
 - While registration is open, check the dashboard daily and delete obvious spam.

@@ -7,16 +7,19 @@ import { fixtureAttendees, fixtureNow, fixtureOrgs } from '../helpers/dashboard-
 const data = buildDashboard({ orgs: fixtureOrgs, attendees: fixtureAttendees, now: fixtureNow });
 const names = (list) => list.map((x) => x.name);
 
-test('filterParticipants by side', () => {
+test('filterParticipants by side, including other', () => {
   assert.deepEqual(names(filterParticipants(data.participants, { side: 'supplier' })), ['Salma Begum']);
-  assert.equal(filterParticipants(data.participants, {}).length, 3);
+  assert.deepEqual(names(filterParticipants(data.participants, { side: 'other' })), ['Nadia Islam']);
+  assert.equal(filterParticipants(data.participants, {}).length, 4);
 });
 
-test('filterParticipants searches name, email, phone and organisation names, ignoring case', () => {
+test('filterParticipants searches name, email, phone, designation, organisation and org names, ignoring case', () => {
   assert.deepEqual(names(filterParticipants(data.participants, { search: 'KARIM' })), ['Karim Ahmed']);
   assert.deepEqual(names(filterParticipants(data.participants, { search: 'salma@' })), ['Salma Begum']);
   assert.deepEqual(names(filterParticipants(data.participants, { search: '000001' })), ['Rahim Uddin']);
   assert.deepEqual(names(filterParticipants(data.participants, { search: 'rainbow' })), ['Rahim Uddin']);
+  assert.deepEqual(names(filterParticipants(data.participants, { search: 'merchandiser' })), ['Rahim Uddin']);
+  assert.deepEqual(names(filterParticipants(data.participants, { search: 'primark' })), ['Nadia Islam']);
   assert.deepEqual(names(filterParticipants(data.participants, { search: 'aspire', side: 'factory' })), ['Rahim Uddin', 'Karim Ahmed']);
 });
 

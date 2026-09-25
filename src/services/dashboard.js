@@ -1,10 +1,10 @@
-import { SEAT_LIMIT } from '../../public/shared/constants.js';
+import { SEAT_LIMITS } from '../../public/shared/constants.js';
 import { runQuery } from '../db.js';
 
 const KINDS = ['supplier', 'factory'];
 
-export function registrationStatus({ seats_used, linked_count }) {
-  if (seats_used >= SEAT_LIMIT) return 'full';
+export function registrationStatus({ seats_used, linked_count, kind }) {
+  if (seats_used >= SEAT_LIMITS[kind]) return 'full';
   if (linked_count >= 1) return 'registered';
   return 'missing';
 }
@@ -15,7 +15,7 @@ export async function loadDashboard(db) {
       .select('id, kind, name, source, status, created_at, seats_used, linked_count')
       .order('name')),
     runQuery(db.from('attendees')
-      .select('id, name, email, phone, from_type, created_at, updated_at, attendee_orgs(org_id, code)')
+      .select('id, name, email, phone, designation, from_type, organisation_name, photo_path, created_at, updated_at, attendee_orgs(org_id, code)')
       .order('created_at')),
   ]);
   return buildDashboard({ orgs, attendees, now: new Date() });
@@ -48,9 +48,12 @@ export function buildDashboard({ orgs, attendees, now }) {
     return {
       id: a.id,
       name: a.name,
+      designation: a.designation,
       email: a.email,
       phone: a.phone,
       from_type: a.from_type,
+      organisation_name: a.organisation_name,
+      photo_path: a.photo_path,
       created_at: a.created_at,
       updated_at: a.updated_at,
       suppliers: side('supplier'),
@@ -58,7 +61,7 @@ export function buildDashboard({ orgs, attendees, now }) {
     };
   });
 
-  const toRow = (o) => ({ ...o, reg_status: registrationStatus(o), people: peopleByOrg.get(o.id) });
+  const toRow = (o) => ({ ...o, reg_status: registrationStatus({ ...o, kind: o.kind }), people: peopleByOrg.get(o.id) });
   const organisations = orgs.filter((o) => o.status === 'approved').map(toRow);
   const pending = orgs.filter((o) => o.status === 'pending').map(toRow);
 
@@ -81,6 +84,7 @@ export function buildDashboard({ orgs, attendees, now }) {
         total: participants.length,
         supplier: participants.filter((p) => p.from_type === 'supplier').length,
         factory: participants.filter((p) => p.from_type === 'factory').length,
+        other: participants.filter((p) => p.from_type === 'other').length,
       },
       suppliers,
       factories,

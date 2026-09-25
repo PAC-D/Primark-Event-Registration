@@ -12,18 +12,27 @@ export const fixtureOrgs = [
 
 export const fixtureAttendees = [
   {
-    id: 'a1', name: 'Rahim Uddin', email: 'rahim@example.com', phone: '+8801711000001', from_type: 'factory',
+    id: 'a1', name: 'Rahim Uddin', designation: 'Merchandiser', email: 'rahim@example.com', phone: '+8801711000001',
+    from_type: 'factory', organisation_name: null, photo_path: '123e4567-e89b-42d3-a456-426614174000.jpg',
     created_at: '2026-09-17T08:00:00Z', updated_at: '2026-09-17T08:00:00Z',
     attendee_orgs: [{ org_id: 1, code: 'S-1' }, { org_id: 5, code: 'R-5' }, { org_id: 3, code: 'F-3' }],
   },
   {
-    id: 'a2', name: 'Karim Ahmed', email: 'karim@example.com', phone: '+8801711000002', from_type: 'factory',
+    id: 'a2', name: 'Karim Ahmed', designation: 'QA Executive', email: 'karim@example.com', phone: '+8801711000002',
+    from_type: 'factory', organisation_name: null, photo_path: null,
     created_at: '2026-09-17T09:00:00Z', updated_at: '2026-09-17T09:00:00Z',
     attendee_orgs: [{ org_id: 3, code: 'F-3b' }],
   },
   {
-    id: 'a3', name: 'Salma Begum', email: 'salma@example.com', phone: '+8801711000003', from_type: 'supplier',
+    id: 'a3', name: 'Salma Begum', designation: 'Director', email: 'salma@example.com', phone: '+8801711000003',
+    from_type: 'supplier', organisation_name: null, photo_path: null,
     created_at: '2026-09-17T10:00:00Z', updated_at: '2026-09-17T10:00:00Z',
     attendee_orgs: [{ org_id: 1, code: 'S-1c' }],
+  },
+  {
+    id: 'a4', name: 'Nadia Islam', designation: 'Sustainability Lead', email: 'nadia@example.com', phone: '+8801711000004',
+    from_type: 'other', organisation_name: 'Primark Limited', photo_path: null,
+    created_at: '2026-09-17T11:00:00Z', updated_at: '2026-09-17T11:00:00Z',
+    attendee_orgs: [],
   },
 ];

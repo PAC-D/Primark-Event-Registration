@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "node --env-file=.env --watch server.js",
+    "start": "node --env-file=.env server.js",
     "test": "node --env-file-if-exists=.env.test --test --test-concurrency=1 \"tests/**/*.test.js\"",
     "test:unit": "node --test \"tests/unit/**/*.test.js\"",
     "import-orgs": "node --env-file=.env scripts/import-orgs.js"

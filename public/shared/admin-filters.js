@@ -6,7 +6,10 @@ export function filterParticipants(participants, { search = '', side = 'all' } =
   const query = norm(search).trim();
   return participants.filter((p) =>
     (side === 'all' || p.from_type === side)
-    && matches(query, [p.name, p.email, p.phone, ...p.suppliers.map((o) => o.name), ...p.factories.map((o) => o.name)]));
+    && matches(query, [
+      p.name, p.email, p.phone, p.designation, p.organisation_name,
+      ...p.suppliers.map((o) => o.name), ...p.factories.map((o) => o.name),
+    ]));
 }
 
 export function filterOrganisations(organisations, { kind, search = '', status = 'all' }) {

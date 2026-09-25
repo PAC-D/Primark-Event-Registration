@@ -1,5 +1,5 @@
 // Pure helpers for the registration form. No DOM access, so they can be unit tested in Node.
-import { SEAT_LIMIT } from './constants.js';
+import { SEAT_LIMITS } from './constants.js';
 
 const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
@@ -10,9 +10,10 @@ export function escapeHtml(value) {
 // ownSeat: the person being edited already holds a seat here. The server does not re-check such
 // organisations, so they are never full for that person (even over the limit after "merge anyway").
 export function seatInfo(org, fromType, ownSeat = false) {
-  if (!fromType || org.kind !== fromType) return { left: null, full: false, label: '' };
+  const limit = SEAT_LIMITS[org.kind];
+  if (!limit || !fromType || org.kind !== fromType) return { left: null, full: false, label: '' };
   const used = org.seats_used - (ownSeat ? 1 : 0);
-  const left = Math.max(ownSeat ? 1 : 0, SEAT_LIMIT - used);
+  const left = Math.max(ownSeat ? 1 : 0, limit - used);
   if (left === 0) return { left, full: true, label: '(full)' };
   return { left, full: false, label: `· ${left} seat${left === 1 ? '' : 's'} left` };
 }
@@ -26,20 +27,18 @@ export function pickerOptions(orgs, { kind, fromType = null, selectedIds = new S
     });
 }
 
-// A row picked from the organisation list (as opposed to a typed "Not in the list" name).
-export const isListed = (row) => row.org_id !== undefined && row.org_id !== null;
-
-export function buildPayload({ fromType, name, email, phone, website = '', rows }) {
-  return {
-    from_type: fromType,
-    name,
-    email,
-    phone,
-    website,
-    orgs: rows.map((r) => (isListed(r)
-      ? { kind: r.kind, org_id: r.org_id, code: r.code }
-      : { kind: r.kind, other_name: r.other_name, code: r.code })),
-  };
+export function buildPayload({
+  fromType, name, email, phone, designation, website = '', rows = [], photoPath = null, organisationName = '',
+}) {
+  const payload = { from_type: fromType, name, email, phone, designation, website };
+  if (photoPath) payload.photo_path = photoPath;
+  if (fromType === 'other') {
+    payload.organisation_name = organisationName;
+    payload.orgs = [];
+  } else {
+    payload.orgs = rows.map((r) => ({ kind: r.kind, org_id: r.org_id }));
+  }
+  return payload;
 }
 
 export function orderRows(rows) {

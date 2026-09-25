@@ -5,10 +5,10 @@ import { escapeHtml } from '/shared/form-logic.js';
 const root = document.getElementById('app');
 
 function showConfirmation(payload, orgs) {
-  const nameOf = (entry) => entry.other_name ?? orgs.find((o) => o.id === entry.org_id)?.name ?? '';
-  const list = (kind) => payload.orgs
+  const fromLabel = { supplier: 'Supplier', factory: 'Factory', other: 'Other' }[payload.from_type];
+  const orgNames = (kind) => payload.orgs
     .filter((entry) => entry.kind === kind)
-    .map((entry) => `<li>${escapeHtml(nameOf(entry))} — code ${escapeHtml(entry.code)}</li>`)
+    .map((entry) => `<li>${escapeHtml(orgs.find((o) => o.id === entry.org_id)?.name ?? '')}</li>`)
     .join('');
 
   root.innerHTML = `
@@ -18,17 +18,22 @@ function showConfirmation(payload, orgs) {
       </div>
       <h2>You're registered!</h2>
       <dl>
-        <dt>Name</dt><dd>${escapeHtml(payload.name)}</dd>
+        <dt>Full Name</dt><dd>${escapeHtml(payload.name)}</dd>
+        <dt>Designation</dt><dd>${escapeHtml(payload.designation)}</dd>
         <dt>Email</dt><dd>${escapeHtml(payload.email)}</dd>
         <dt>Phone</dt><dd>${escapeHtml(payload.phone)}</dd>
-        <dt>Attending from</dt><dd>${payload.from_type === 'supplier' ? 'Supplier' : 'Factory'}</dd>
+        <dt>Attending from</dt><dd>${fromLabel}</dd>
+        ${payload.from_type === 'other'
+          ? `<dt>Organisation</dt><dd>${escapeHtml(payload.organisation_name)}</dd>`
+          : ''}
       </dl>
-      <h3>Suppliers</h3>
-      <ul>${list('supplier')}</ul>
-      <h3>Factories</h3>
-      <ul>${list('factory')}</ul>
-      <p class="muted">New organisations you added will be reviewed by the event team.
-        To change or cancel your registration, contact the event team.</p>
+      ${payload.from_type !== 'other' ? `
+        <h3>Suppliers</h3>
+        <ul>${orgNames('supplier') || '<li>—</li>'}</ul>
+        <h3>Factories</h3>
+        <ul>${orgNames('factory') || '<li>—</li>'}</ul>
+      ` : ''}
+      <p class="muted">To change or cancel your registration, contact the event team.</p>
       <button type="button" class="btn" id="register-another">Register another person</button>
     </div>`;
   root.querySelector('.confirmation').focus();
@@ -44,7 +49,7 @@ async function start() {
     return;
   }
 
-  document.title = `Primark Event Registration – ${data.event_title}`;
+  document.title = `Primark Carton Nomination Program — ${data.event_title}`;
   document.getElementById('event-subtitle').textContent = data.event_title;
 
   mountRegistrationForm(root, {

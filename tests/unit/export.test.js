@@ -41,23 +41,29 @@ test('Summary lists every dashboard number', async () => {
     wb.getWorksheet('Summary').getSheetValues().slice(2).map((row) => [row[1], row[2]]),
   );
   assert.equal(summary['Exported at (Asia/Dhaka)'], '2026-09-17 14:30');
-  assert.equal(summary.Participants, 3);
+  assert.equal(summary.Participants, 4);
   assert.equal(summary['Participants from factories'], 2);
+  assert.equal(summary['Participants from other orgs'], 1);
   assert.equal(summary['Suppliers registered (from list)'], 1);
   assert.equal(summary['Suppliers on list'], 2);
   assert.equal(summary['Factories full'], 1);
   assert.equal(summary['Pending approvals'], 1);
 });
 
-test('Participants has one row per person with joined organisations and codes', async () => {
+test('Participants has one row per person with designation, organisation and photo columns', async () => {
   const sheet = (await roundTrip(buildWorkbook(data()))).getWorksheet('Participants');
   assert.deepEqual(headers(sheet), [
-    'Name', 'Email', 'Phone', 'From', 'Suppliers', 'Supplier codes', 'Factories', 'Factory codes', 'Registered at',
+    'Name', 'Designation', 'Email', 'Phone', 'From', 'Suppliers', 'Supplier codes',
+    'Factories', 'Factory codes', 'Organisation (other)', 'Photo', 'Registered at',
   ]);
-  assert.equal(sheet.rowCount, 4);
+  assert.equal(sheet.rowCount, 5);
   assert.deepEqual(sheet.getRow(2).values.slice(1), [
-    'Rahim Uddin', 'rahim@example.com', '+8801711000001', 'Factory',
-    'Padma Textiles Ltd', 'S-1', 'Aspire Garments (24040); Rainbow Knit Ltd', 'F-3; R-5', '2026-09-17 14:00',
+    'Rahim Uddin', 'Merchandiser', 'rahim@example.com', '+8801711000001', 'Factory',
+    'Padma Textiles Ltd', 'S-1', 'Aspire Garments (24040); Rainbow Knit Ltd', 'F-3; R-5', '', 'Y', '2026-09-17 14:00',
+  ]);
+  assert.deepEqual(sheet.getRow(5).values.slice(1), [
+    'Nadia Islam', 'Sustainability Lead', 'nadia@example.com', '+8801711000004', 'Other',
+    '', '', '', '', 'Primark Limited', 'N', '2026-09-17 17:00',
   ]);
 });
 

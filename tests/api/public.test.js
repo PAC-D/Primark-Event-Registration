@@ -7,10 +7,11 @@ import { fakeDb, testConfig } from '../helpers/fake-db.js';
 const body = () => ({
   from_type: 'factory',
   name: ' Rahim Uddin ',
+  designation: ' Merchandiser ',
   email: 'rahim@example.com',
   phone: '+880 1711-000000',
   website: '',
-  orgs: [{ kind: 'supplier', org_id: 1, code: 'S1' }, { kind: 'factory', org_id: 2, code: 'F1' }],
+  orgs: [{ kind: 'factory', org_id: 2 }, { kind: 'supplier', org_id: 1 }],
 });
 
 const appWith = (db) => createApp({ db, config: testConfig });
@@ -30,10 +31,11 @@ test('POST /api/register saves the validated payload and returns 201', async () 
   const res = await request(appWith(db)).post('/api/register').send(body());
   assert.equal(res.status, 201);
   assert.deepEqual(res.body, { id: 'new-id' });
-  assert.equal(db.calls.length, 1);
-  assert.equal(db.calls[0].fn, 'register_attendee');
-  assert.equal(db.calls[0].args.p.name, 'Rahim Uddin');
-  assert.equal('website' in db.calls[0].args.p, false);
+  const call = db.calls.find((c) => c.fn === 'register_attendee');
+  assert.equal(call.args.p.name, 'Rahim Uddin');
+  assert.equal(call.args.p.designation, 'Merchandiser');
+  assert.equal('website' in call.args.p, false);
+  assert.equal('code' in call.args.p.orgs[0], false);
 });
 
 test('an invalid body returns 400 with field messages and never reaches the database', async () => {
@@ -42,8 +44,16 @@ test('an invalid body returns 400 with field messages and never reaches the data
   assert.equal(res.status, 400);
   assert.equal(res.body.error, 'VALIDATION');
   assert.ok(res.body.fields.email);
-  assert.ok(res.body.fields.suppliers);
-  assert.equal(db.calls.length, 0);
+  assert.ok(res.body.fields.factories);
+  assert.equal(db.calls.filter((c) => c.fn).length, 0);
+});
+
+test('a junk photo_path is rejected before the database is called', async () => {
+  const db = fakeDb();
+  const res = await request(appWith(db)).post('/api/register').send({ ...body(), photo_path: '../etc/passwd' });
+  assert.equal(res.status, 400);
+  assert.ok(res.body.fields.photo);
+  assert.equal(db.calls.filter((c) => c.fn).length, 0);
 });
 
 test('a filled honeypot returns 201 without saving', async (t) => {
@@ -72,7 +82,7 @@ test('SEAT_FULL from the database becomes 409 with a friendly message', async ()
   assert.equal(res.status, 409);
   assert.deepEqual(res.body, {
     error: 'SEAT_FULL',
-    message: 'Already full (2 factory attendees): Aspire (24040). Remove them or contact the event team.',
+    message: 'Already full (factory limit 1): Aspire (24040). Remove them or contact the event team.',
   });
 });
 
@@ -118,6 +128,6 @@ test('GET / serves the registration page (Vercel does not map / to public/index.
   const res = await request(appWith(fakeDb())).get('/');
   assert.equal(res.status, 200);
   assert.match(res.headers['content-type'], /^text\/html/);
-  assert.match(res.text, /<title>Primark Event Registration<\/title>/);
+  assert.match(res.text, /<title>Primark Carton Nomination Program<\/title>/);
   assert.match(res.text, /src="\/js\/register\.js"/);
 });
