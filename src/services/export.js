@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { EVENT_TIME_ZONE } from '../../public/shared/constants.js';
 
-const SIDE = { supplier: 'Supplier', factory: 'Factory' };
+const SIDE = { supplier: 'Supplier', factory: 'Factory', other: 'Other' };
 const REG_STATUS = { missing: 'Missing', registered: 'Registered', full: 'Full' };
 const ORG_STATUS = { approved: 'Approved', pending: 'Pending' };
 
@@ -72,6 +72,7 @@ export function buildWorkbook(data) {
     { item: 'Participants', value: s.participants.total },
     { item: 'Participants from suppliers', value: s.participants.supplier },
     { item: 'Participants from factories', value: s.participants.factory },
+    { item: 'Participants from other orgs', value: s.participants.other },
     { item: 'Suppliers registered (from list)', value: s.suppliers.list_registered },
     { item: 'Suppliers on list', value: s.suppliers.list_total },
     { item: 'Suppliers missing', value: s.suppliers.missing },
@@ -84,11 +85,13 @@ export function buildWorkbook(data) {
   ]);
 
   addSheet(workbook, 'Participants', [
-    ['Name', 'name', 25], ['Email', 'email', 30], ['Phone', 'phone', 18], ['From', 'from', 10],
-    ['Suppliers', 'suppliers', 45], ['Supplier codes', 'supplier_codes', 20],
-    ['Factories', 'factories', 45], ['Factory codes', 'factory_codes', 20], ['Registered at', 'registered_at', 18],
+    ['Name', 'name', 25], ['Designation', 'designation', 22], ['Email', 'email', 30], ['Phone', 'phone', 18],
+    ['From', 'from', 10], ['Suppliers', 'suppliers', 45], ['Supplier codes', 'supplier_codes', 20],
+    ['Factories', 'factories', 45], ['Factory codes', 'factory_codes', 20],
+    ['Organisation (other)', 'organisation', 30], ['Photo', 'photo', 8], ['Registered at', 'registered_at', 18],
   ], data.participants.map((p) => ({
     name: p.name,
+    designation: p.designation,
     email: p.email,
     phone: p.phone,
     from: SIDE[p.from_type],
@@ -96,6 +99,8 @@ export function buildWorkbook(data) {
     supplier_codes: codes(p.suppliers),
     factories: names(p.factories),
     factory_codes: codes(p.factories),
+    organisation: p.organisation_name ?? '',
+    photo: p.photo_path ? 'Y' : 'N',
     registered_at: formatDhaka(p.created_at),
   })));
 

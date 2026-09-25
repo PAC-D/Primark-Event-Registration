@@ -8,15 +8,16 @@ const runScript = (...args) => spawnSync(process.execPath, ['scripts/import-orgs
   env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
 });
 
-test('import script prints usage and exits 1 without a file argument', () => {
+test('import script exits 1 and prints a short error when env vars are missing', () => {
   const result = runScript();
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /^Usage: /);
+  assert.match(result.stderr, /^Import failed: /);
+  assert.doesNotMatch(result.stderr, /\n\s+at /);
 });
 
-test('import script reports a missing file in one line and exits 1', () => {
-  const result = runScript('does-not-exist.xlsx');
+test('import script reports a missing data directory in one line and exits 1', () => {
+  const result = runScript('does-not-exist');
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /^Import failed: .*does-not-exist\.xlsx/);
+  assert.match(result.stderr, /^Import failed: /);
   assert.doesNotMatch(result.stderr, /\n\s+at /);
 });

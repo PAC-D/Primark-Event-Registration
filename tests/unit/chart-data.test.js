@@ -16,7 +16,7 @@ test('registrationTimeline is empty when nobody has registered', () => {
 });
 
 test('registrationTimeline counts per Dhaka day with a running total', () => {
-  assert.deepEqual(registrationTimeline(data.participants), [{ day: '2026-09-17', count: 3, total: 3 }]);
+  assert.deepEqual(registrationTimeline(data.participants), [{ day: '2026-09-17', count: 4, total: 4 }]);
 });
 
 test('registrationTimeline fills days without registrations and ignores input order', () => {

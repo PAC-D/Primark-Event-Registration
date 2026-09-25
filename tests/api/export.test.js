@@ -35,5 +35,5 @@ test('GET /api/admin/export downloads an xlsx built from the dashboard data', as
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(res.body);
   assert.equal(workbook.worksheets.length, 7);
-  assert.equal(workbook.getWorksheet('Participants').rowCount, 4);
+  assert.equal(workbook.getWorksheet('Participants').rowCount, 5);
 });

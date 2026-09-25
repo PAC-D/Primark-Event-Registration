@@ -4,12 +4,14 @@ import { AppError, errorHandler, errors, fromDbError } from '../../src/errors.js
 
 const dbError = (message, details = null, code = 'P0001') => ({ message, details, hint: null, code });
 
-test('SEAT_FULL becomes 409 naming the side and organisations', () => {
+test('SEAT_FULL becomes 409 naming the side, per-kind limit and organisations', () => {
   const err = fromDbError(dbError('SEAT_FULL', JSON.stringify({ side: 'factory', orgs: ['Aspire (1)', 'Windy (2)'] })));
   assert.ok(err instanceof AppError);
   assert.equal(err.code, 'SEAT_FULL');
   assert.equal(err.status, 409);
-  assert.equal(err.message, 'Already full (2 factory attendees): Aspire (1); Windy (2). Remove them or contact the event team.');
+  assert.equal(err.message, 'Already full (factory limit 1): Aspire (1); Windy (2). Remove them or contact the event team.');
+  const supplier = fromDbError(dbError('SEAT_FULL', JSON.stringify({ side: 'supplier', orgs: ['Padma'] })));
+  assert.equal(supplier.message, 'Already full (supplier limit 2): Padma. Remove them or contact the event team.');
 });
 
 test('DUPLICATE_EMAIL becomes 409 with the spec message', () => {
@@ -18,11 +20,13 @@ test('DUPLICATE_EMAIL becomes 409 with the spec message', () => {
   assert.equal(err.message, 'This email is already registered. Contact the event team to change it.');
 });
 
-test('MERGE_OVER_LIMIT becomes 409 with the projected count', () => {
+test('MERGE_OVER_LIMIT becomes 409 with the projected count and per-kind limit', () => {
   const err = fromDbError(dbError('MERGE_OVER_LIMIT', JSON.stringify({ target: 'PADMA TEXTILES LTD', side: 'supplier', count: 3 })));
   assert.equal(err.status, 409);
   assert.equal(err.message, 'PADMA TEXTILES LTD would have 3 supplier attendees (limit 2). Merge anyway?');
   assert.deepEqual(err.extra, { count: 3 });
+  const factory = fromDbError(dbError('MERGE_OVER_LIMIT', JSON.stringify({ target: 'Aspire (24040)', side: 'factory', count: 2 })));
+  assert.equal(factory.message, 'Aspire (24040) would have 2 factory attendees (limit 1). Merge anyway?');
 });
 
 test('NOT_FOUND and ORG_NOT_FOUND become 404', () => {

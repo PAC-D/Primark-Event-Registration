@@ -1,43 +1,45 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import ExcelJS from 'exceljs';
-import { readAssignments } from '../../src/services/import.js';
+import { parseList, readOrganisationLists } from '../../src/services/import.js';
 
-async function writeXlsx(t, rows, sheetName = 'Assignments') {
+test('parseList trims rows, skips blanks and keeps commas inside names', () => {
+  const rows = parseList('code|name\n 84016 | BIOWORLD INTERNATIONAL LTD FOB \n\n83666|HONG KONG DIJIA TUO TECHNOLOGY CO., LIMITED\n', 'supplier');
+  assert.deepEqual(rows, [
+    { kind: 'supplier', code: '84016', name: 'BIOWORLD INTERNATIONAL LTD FOB' },
+    { kind: 'supplier', code: '83666', name: 'HONG KONG DIJIA TUO TECHNOLOGY CO., LIMITED' },
+  ]);
+});
+
+test('parseList rejects a malformed line and a wrong header', () => {
+  assert.throws(() => parseList('code|name\nNO-PIPE-HERE\n', 'supplier'), /line 2/i);
+  assert.throws(() => parseList('name|code\n68740|ABA\n', 'supplier'), /header/i);
+});
+
+async function writeLists(t, suppliers, factories) {
   const dir = await mkdtemp(path.join(tmpdir(), 'import-test-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const file = path.join(dir, 'list.xlsx');
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet(sheetName);
-  for (const row of rows) sheet.addRow(row);
-  await workbook.xlsx.writeFile(file);
-  return file;
+  await writeFile(path.join(dir, 'suppliers.psv'), suppliers);
+  await writeFile(path.join(dir, 'factories.psv'), factories);
+  return dir;
 }
 
-test('reads suppliers and factories row by row, trimming names and skipping blanks', async (t) => {
-  const file = await writeXlsx(t, [
-    ['Supplier', 'Factory'],
-    ['PADMA TEXTILES LTD ', 'Aspire Garments Ltd PJT (24040)'],
-    [null, ' Windy Apparels Ltd (20096)'],
-    ['PEARL GLOBAL (HK) LTD', ''],
-  ]);
-  assert.deepEqual(await readAssignments(file), [
-    { kind: 'supplier', name: 'PADMA TEXTILES LTD' },
-    { kind: 'factory', name: 'Aspire Garments Ltd PJT (24040)' },
-    { kind: 'factory', name: 'Windy Apparels Ltd (20096)' },
-    { kind: 'supplier', name: 'PEARL GLOBAL (HK) LTD' },
+test('readOrganisationLists reads both files from a directory', async (t) => {
+  const dir = await writeLists(t, 'code|name\n68740|ABA FASHIONS LTD\n', 'code|name\n24718|AB Apparels Ltd\n');
+  assert.deepEqual(await readOrganisationLists(dir), [
+    { kind: 'supplier', code: '68740', name: 'ABA FASHIONS LTD' },
+    { kind: 'factory', code: '24718', name: 'AB Apparels Ltd' },
   ]);
 });
 
-test('falls back to the first sheet when there is no Assignments sheet', async (t) => {
-  const file = await writeXlsx(t, [['Supplier', 'Factory'], ['A Supplier', 'A Factory']], 'Sheet1');
-  assert.equal((await readAssignments(file)).length, 2);
-});
-
-test('rejects a sheet without Supplier / Factory headers', async (t) => {
-  const file = await writeXlsx(t, [['Name', 'Code'], ['x', 'y']]);
-  await assert.rejects(readAssignments(file), /Expected headers "Supplier" and "Factory"/);
+test('the committed data files parse to 80 suppliers and 168 factories, all with codes', async () => {
+  const dir = path.join(import.meta.dirname, '..', '..', 'scripts', 'data');
+  const orgs = await readOrganisationLists(dir);
+  const suppliers = orgs.filter((o) => o.kind === 'supplier');
+  const factories = orgs.filter((o) => o.kind === 'factory');
+  assert.equal(suppliers.length, 80);
+  assert.equal(factories.length, 168);
+  assert.ok(orgs.every((o) => /^[0-9]{5}$/.test(o.code) && o.name.length > 0));
 });

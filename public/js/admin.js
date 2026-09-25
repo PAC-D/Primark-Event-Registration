@@ -2,12 +2,12 @@ import { api } from './api.js';
 import { renderCharts } from './charts.js';
 import { prefersReducedMotion } from './motion.js';
 import { mountRegistrationForm } from './registration-form.js';
-import { EVENT_TIME_ZONE, SEAT_LIMIT } from '/shared/constants.js';
+import { EVENT_TIME_ZONE, SEAT_LIMITS } from '/shared/constants.js';
 import { escapeHtml } from '/shared/form-logic.js';
 import { filterOrganisations, filterParticipants, filterPending } from '/shared/admin-filters.js';
 
 const $ = (selector) => document.querySelector(selector);
-const SIDE = { supplier: 'Supplier', factory: 'Factory' };
+const SIDE = { supplier: 'Supplier', factory: 'Factory', other: 'Other' };
 const STATUS = { missing: 'Missing', registered: 'Registered', full: 'Full' };
 
 const view = { tab: 'participants', search: '', side: 'all', status: 'all' };
@@ -97,7 +97,7 @@ function renderTiles() {
   const tile = (index, label, value, sub) =>
     `<div class="tile anim-rise" style="--i: ${index + 1}"><div class="tile-label">${label}</div><div class="tile-value">${value}</div><div class="tile-sub">${sub}</div></div>`;
   $('#tiles').innerHTML = [
-    tile(0, 'Participants', counter('participants', s.participants.total), `supplier ${s.participants.supplier} · factory ${s.participants.factory}`),
+    tile(0, 'Participants', counter('participants', s.participants.total), `supplier ${s.participants.supplier} · factory ${s.participants.factory} · other ${s.participants.other}`),
     tile(1, 'Suppliers', `${counter('suppliers', s.suppliers.list_registered)}/${s.suppliers.list_total}`, `missing ${s.suppliers.missing} · full ${s.suppliers.full}`),
     tile(2, 'Factories', `${counter('factories', s.factories.list_registered)}/${s.factories.list_total}`, `missing ${s.factories.missing} · full ${s.factories.full}`),
     tile(3, 'Pending approvals', counter('pending', s.pending), 'new organisations'),
@@ -124,10 +124,20 @@ const peopleList = (people, withCodes = false) => people.map((p) =>
 function renderParticipants() {
   const rows = filterParticipants(data.participants, view);
   return table(
-    ['Name', 'Email', 'Phone', 'From', 'Suppliers', 'Factories', 'Registered', ''],
+    ['Name', 'Designation', 'Email', 'Phone', 'From', 'Organisation', 'Suppliers', 'Factories', 'Photo', 'Registered', ''],
     rows.map((p) => [
-      escapeHtml(p.name), escapeHtml(p.email), escapeHtml(p.phone), SIDE[p.from_type],
-      orgLinks(p.suppliers), orgLinks(p.factories), formatTime(p.created_at),
+      escapeHtml(p.name),
+      escapeHtml(p.designation ?? ''),
+      escapeHtml(p.email),
+      escapeHtml(p.phone),
+      SIDE[p.from_type],
+      p.from_type === 'other' ? escapeHtml(p.organisation_name ?? '') : '—',
+      p.suppliers.length ? orgLinks(p.suppliers) : '—',
+      p.factories.length ? orgLinks(p.factories) : '—',
+      p.photo_path
+        ? `<a href="/api/admin/participants/${p.id}/photo" target="_blank" rel="noopener"><img class="photo-thumb" src="/api/admin/participants/${p.id}/photo" alt="Attendee photo"></a>`
+        : '—',
+      formatTime(p.created_at),
       `<span class="row-actions"><button type="button" class="btn small" data-edit="${p.id}">Edit</button>
        <button type="button" class="btn small danger" data-delete="${p.id}">Delete</button></span>`,
     ]),
@@ -137,13 +147,14 @@ function renderParticipants() {
 
 function renderOrganisations(kind) {
   const rows = filterOrganisations(data.organisations, { kind, search: view.search, status: view.status });
+  const limit = SEAT_LIMITS[kind];
   return table(
     ['Name', 'Seats used', 'People', 'Status'],
     rows.map((o) => [
       `${escapeHtml(o.name)}${o.source === 'attendee' ? ' <span class="badge new">New</span>' : ''}`,
-      o.seats_used > SEAT_LIMIT
-        ? `${o.seats_used}/${SEAT_LIMIT} <span class="badge over">over limit</span>`
-        : `${o.seats_used}/${SEAT_LIMIT}`,
+      o.seats_used > limit
+        ? `${o.seats_used}/${limit} <span class="badge over">over limit</span>`
+        : `${o.seats_used}/${limit}`,
       peopleList(o.people),
       `<span class="badge ${o.reg_status}">${STATUS[o.reg_status]}</span>`,
     ]),
@@ -169,7 +180,7 @@ function renderChips() {
     `<button type="button" class="chip" data-chip-group="${group}" data-chip-value="${value}" aria-pressed="${view[group] === value}">${label}</button>`;
   let chips = [];
   if (view.tab === 'participants') {
-    chips = [['all', 'All'], ['supplier', 'From supplier'], ['factory', 'From factory']].map(([v, l]) => chip('side', v, l));
+    chips = [['all', 'All'], ['supplier', 'From supplier'], ['factory', 'From factory'], ['other', 'From other']].map(([v, l]) => chip('side', v, l));
   } else if (view.tab === 'supplier' || view.tab === 'factory') {
     chips = [['all', 'All'], ['missing', 'Missing'], ['registered', 'Registered'], ['full', 'Full']].map(([v, l]) => chip('status', v, l));
   }
@@ -294,7 +305,7 @@ function openMerge(id) {
     maxOptions: 500,
     options: data.organisations
       .filter((o) => o.kind === source.kind)
-      .map((o) => ({ value: String(o.id), text: `${o.name} (${o.seats_used}/${SEAT_LIMIT})` })),
+      .map((o) => ({ value: String(o.id), text: `${o.name} (${o.seats_used}/${SEAT_LIMITS[o.kind]})` })),
     // A warning (e.g. "Merge anyway?") belongs to the previous choice.
     onChange: () => {
       const box = $('#modal-error');

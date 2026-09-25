@@ -1,65 +1,59 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPayload, escapeHtml, isListed, orderRows, pickerOptions, seatInfo } from '../../public/shared/form-logic.js';
+import { buildPayload, escapeHtml, orderRows, pickerOptions, seatInfo } from '../../public/shared/form-logic.js';
 
-const factory = (id, seats_used, name = `Factory ${id}`) => ({ id, kind: 'factory', name, seats_used });
-const supplier = (id, seats_used, name = `Supplier ${id}`) => ({ id, kind: 'supplier', name, seats_used });
+const supplierOrg = (seats_used) => ({ id: 1, kind: 'supplier', name: 'A Supplier', seats_used });
+const factoryOrg = (seats_used) => ({ id: 2, kind: 'factory', name: 'A Factory', seats_used });
 
 test('escapeHtml escapes the five HTML-special characters and handles null', () => {
   assert.equal(escapeHtml(`<a href="x">'&'</a>`), '&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;');
   assert.equal(escapeHtml(null), '');
 });
 
-test('seatInfo shows hints only for the side the person is from', () => {
-  assert.deepEqual(seatInfo(factory(1, 0), null), { left: null, full: false, label: '' });
-  assert.deepEqual(seatInfo(factory(1, 0), 'supplier'), { left: null, full: false, label: '' });
-  assert.deepEqual(seatInfo(factory(1, 0), 'factory'), { left: 2, full: false, label: '· 2 seats left' });
-  assert.deepEqual(seatInfo(factory(1, 1), 'factory'), { left: 1, full: false, label: '· 1 seat left' });
-  assert.deepEqual(seatInfo(factory(1, 2), 'factory'), { left: 0, full: true, label: '(full)' });
-  assert.deepEqual(seatInfo(factory(1, 3), 'factory'), { left: 0, full: true, label: '(full)' });
+test('suppliers allow 2 seats, factories 1', () => {
+  assert.deepEqual(seatInfo(supplierOrg(0), 'supplier'), { left: 2, full: false, label: '· 2 seats left' });
+  assert.deepEqual(seatInfo(supplierOrg(2), 'supplier'), { left: 0, full: true, label: '(full)' });
+  assert.deepEqual(seatInfo(factoryOrg(0), 'factory'), { left: 1, full: false, label: '· 1 seat left' });
+  assert.deepEqual(seatInfo(factoryOrg(1), 'factory'), { left: 0, full: true, label: '(full)' });
 });
 
-test('seatInfo ignores the edited person\'s own seat', () => {
-  assert.deepEqual(seatInfo(factory(1, 2), 'factory', true), { left: 1, full: false, label: '· 1 seat left' });
+test('no hints for the other side, other attendees, or a null from-type', () => {
+  assert.deepEqual(seatInfo(supplierOrg(0), 'factory'), { left: null, full: false, label: '' });
+  assert.deepEqual(seatInfo(supplierOrg(0), 'other'), { left: null, full: false, label: '' });
+  assert.deepEqual(seatInfo(supplierOrg(0), null), { left: null, full: false, label: '' });
 });
 
-test('seatInfo never marks an org full where the person already holds a seat (e.g. after merge anyway)', () => {
-  assert.deepEqual(seatInfo(factory(1, 3), 'factory', true), { left: 1, full: false, label: '· 1 seat left' });
+test('an own seat never counts as full even when at the limit', () => {
+  assert.deepEqual(seatInfo(factoryOrg(1), 'factory', true), { left: 1, full: false, label: '· 1 seat left' });
+  assert.deepEqual(seatInfo(supplierOrg(2), 'supplier', true), { left: 1, full: false, label: '· 1 seat left' });
 });
 
-test('pickerOptions filters by kind, hides selected ones and disables full ones', () => {
-  const orgs = [supplier(1, 2), factory(2, 2), factory(3, 0), factory(4, 1)];
-  assert.deepEqual(
-    pickerOptions(orgs, { kind: 'factory', fromType: 'factory', selectedIds: new Set([4]) }),
-    [
-      { value: '2', text: 'Factory 2', hint: '(full)', disabled: true },
-      { value: '3', text: 'Factory 3', hint: '· 2 seats left', disabled: false },
-    ],
-  );
-  assert.deepEqual(
-    pickerOptions(orgs, { kind: 'supplier', fromType: 'factory' }),
-    [{ value: '1', text: 'Supplier 1', hint: '', disabled: false }],
-  );
-  assert.equal(
-    pickerOptions(orgs, { kind: 'factory', fromType: 'factory', ownSeatIds: new Set([2]) })[0].disabled,
-    false,
-  );
+test('pickerOptions disables full orgs on the from side only', () => {
+  const options = pickerOptions([supplierOrg(2), factoryOrg(1)], { kind: 'factory', fromType: 'factory' });
+  assert.equal(options[0].disabled, true);
+  const crossSide = pickerOptions([factoryOrg(1)], { kind: 'factory', fromType: 'supplier' });
+  assert.equal(crossSide[0].disabled, false);
 });
 
-test('buildPayload turns rows into listed and new organisation entries', () => {
-  assert.deepEqual(buildPayload({
-    fromType: 'factory', name: 'N', email: 'e', phone: 'p', website: '',
-    rows: [
-      { key: 1, kind: 'supplier', org_id: 7, name: 'Padma', code: 'S' },
-      { key: 2, kind: 'factory', other_name: 'Rainbow', code: 'F' },
-    ],
-  }), {
-    from_type: 'factory', name: 'N', email: 'e', phone: 'p', website: '',
-    orgs: [
-      { kind: 'supplier', org_id: 7, code: 'S' },
-      { kind: 'factory', other_name: 'Rainbow', code: 'F' },
-    ],
+test('buildPayload sends org_ids without codes for supplier/factory attendees', () => {
+  const payload = buildPayload({
+    fromType: 'factory', name: 'N', email: 'e@x.com', phone: '1234567', designation: 'D',
+    rows: [{ kind: 'factory', org_id: 2 }, { kind: 'supplier', org_id: 1 }],
   });
+  assert.deepEqual(payload, {
+    from_type: 'factory', name: 'N', email: 'e@x.com', phone: '1234567', designation: 'D', website: '',
+    orgs: [{ kind: 'factory', org_id: 2 }, { kind: 'supplier', org_id: 1 }],
+  });
+});
+
+test('buildPayload for other attendees carries organisation_name, no orgs; photo_path only when set', () => {
+  const baseArgs = { fromType: 'other', name: 'N', email: 'e@x.com', phone: '1234567', designation: 'D', organisationName: 'Primark Limited' };
+  assert.deepEqual(buildPayload(baseArgs), {
+    from_type: 'other', name: 'N', email: 'e@x.com', phone: '1234567', designation: 'D', website: '',
+    organisation_name: 'Primark Limited', orgs: [],
+  });
+  const withPhoto = buildPayload({ ...baseArgs, photoPath: '123e4567-e89b-42d3-a456-426614174000.png' });
+  assert.equal(withPhoto.photo_path, '123e4567-e89b-42d3-a456-426614174000.png');
 });
 
 test('orderRows puts suppliers before factories and keeps order within each kind', () => {
@@ -67,11 +61,4 @@ test('orderRows puts suppliers before factories and keeps order within each kind
     { key: 1, kind: 'factory' }, { key: 2, kind: 'supplier' }, { key: 3, kind: 'factory' }, { key: 4, kind: 'supplier' },
   ];
   assert.deepEqual(orderRows(rows).map((r) => r.key), [2, 4, 1, 3]);
-});
-
-test('isListed is true only for rows picked from the list (org_id present, including 0)', () => {
-  assert.equal(isListed({ kind: 'supplier', org_id: 7 }), true);
-  assert.equal(isListed({ kind: 'supplier', org_id: 0 }), true);
-  assert.equal(isListed({ kind: 'supplier', org_id: null, other_name: 'New' }), false);
-  assert.equal(isListed({ kind: 'supplier', other_name: 'New' }), false);
 });

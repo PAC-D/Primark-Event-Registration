@@ -1,21 +1,20 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../src/config.js';
 import { createDb } from '../src/db.js';
-import { importOrganisations, readAssignments } from '../src/services/import.js';
+import { importOrganisations, readOrganisationLists } from '../src/services/import.js';
 
-const filePath = process.argv[2];
-if (!filePath) {
-  console.error('Usage: node --env-file=.env scripts/import-orgs.js "<path to xlsx>"');
-  process.exit(1);
-}
+const defaultDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data');
+const dir = process.argv[2] ?? defaultDir;
 
 try {
-  const orgs = await readAssignments(filePath);
+  const orgs = await readOrganisationLists(dir);
   const suppliers = orgs.filter((o) => o.kind === 'supplier').length;
   const factories = orgs.length - suppliers;
-  const { read, inserted } = await importOrganisations(createDb(loadConfig()), orgs);
+  const { read, inserted, pruned } = await importOrganisations(createDb(loadConfig()), orgs);
 
   console.log(
-    `Read ${suppliers} suppliers and ${factories} factories; inserted ${inserted} new organisations (${read - inserted} already existed).`,
+    `Read ${suppliers} suppliers and ${factories} factories; inserted ${inserted}, pruned ${pruned} organisations no longer on the list.`,
   );
 } catch (error) {
   // Bad path, wrong headers, missing env vars or a database error: one readable line, no stack trace.

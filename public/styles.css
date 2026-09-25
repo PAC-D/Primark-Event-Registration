@@ -1,4 +1,4 @@
-/* Primark Event Registration — navy executive band + frosted glass cards.
+/* Primark Carton Nomination Program — navy executive band + frosted glass cards.
    Colours come from the PacD (navy #002b61, blue #0082cb, sky #00aeef) and Primark (#00a0d5) logos. */
 
 :root {
@@ -43,7 +43,7 @@
 
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--ink);
-  background: #eaf1fb;
+  background: #fff;
 }
 
 * { box-sizing: border-box; }
@@ -53,29 +53,12 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   color: var(--ink);
-  background: linear-gradient(160deg, #e6f2fb 0%, #eceffc 50%, #edf7f2 100%) fixed;
+  background: #fff;
   overflow-x: hidden;
 }
 
-/* ---------- Floating background shapes (behind the glass) ---------- */
-
-.bg-blobs { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
-.bg-blobs span {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.5;
-  animation: drift 22s ease-in-out infinite alternate;
-}
-.bg-blobs span:nth-child(1) { width: 440px; height: 440px; background: #9ed8f4; top: 200px; left: -120px; }
-.bg-blobs span:nth-child(2) { width: 380px; height: 380px; background: #b9c7fb; bottom: -140px; right: -80px; animation-delay: -7s; }
-.bg-blobs span:nth-child(3) { width: 280px; height: 280px; background: #bfeadb; top: 55%; left: 50%; animation-delay: -14s; }
-
-@keyframes drift {
-  0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(40px, 30px) scale(1.08); }
-  100% { transform: translate(-30px, 50px) scale(0.95); }
-}
+/* The hidden attribute must always win over component display styles. */
+[hidden] { display: none !important; }
 
 /* ---------- Entrance and feedback animations ---------- */
 
@@ -114,16 +97,15 @@ body {
 
 .anim-rise { animation: rise 0.7s var(--ease-spring) backwards; animation-delay: calc(var(--i, 0) * 80ms); }
 
-/* ---------- Navy brand band ---------- */
+/* ---------- Brand header (white band) ---------- */
 
 .brand-band {
   position: relative;
   overflow: hidden;
   padding: 22px 16px 92px;
-  color: #fff;
-  background:
-    radial-gradient(700px 260px at 85% -40%, rgba(0, 174, 239, 0.35) 0%, transparent 70%),
-    linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 65%, #0a5aa6 100%);
+  color: var(--ink);
+  background: #fff;
+  border-bottom: 1px solid var(--line);
 }
 .brand-inner, .band-intro { max-width: 760px; margin: 0 auto; }
 .brand-band.wide .brand-inner { max-width: 1280px; }
@@ -133,17 +115,18 @@ body {
   padding: 6px 10px;
   border-radius: var(--radius-control);
   background: #fff;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
 }
 .brand-logo { display: block; height: auto; }
 .brand-logo.pacd { width: 80px; }
 .brand-logo.primark { width: 132px; margin-left: auto; }
 .brand-title { min-width: 0; }
-.brand-title h1 { margin: 0; font-size: 1.5rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.015em; color: #fff; }
-.brand-sub { margin: 2px 0 0; color: #9fd3f2; font-weight: 500; }
+.brand-title h1 { margin: 0; font-size: 1.5rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.015em; color: var(--navy); }
+.brand-sub { margin: 2px 0 0; color: var(--muted); font-weight: 500; }
 .brand-sub:empty { display: none; }
-.band-intro { margin-top: 16px; color: rgba(255, 255, 255, 0.78); font-size: 0.95rem; }
-.band-intro .req { color: #fda29b; }
+.band-intro { margin-top: 16px; color: var(--muted); font-size: 0.95rem; }
+.band-intro .req { color: var(--danger-fill); }
 
 /* ---------- Layout ---------- */
 
@@ -154,7 +137,8 @@ body {
 .toolbar,
 .tile,
 .chart-card,
-.table-wrap {
+.table-wrap,
+.event-details {
   background: var(--glass);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
   backdrop-filter: blur(18px) saturate(140%);
@@ -164,6 +148,23 @@ body {
 }
 .card { padding: 28px; }
 .card.narrow { max-width: 420px; margin: 0 auto; }
+
+/* Event details strip above the form card. */
+.event-details { padding: 14px 20px; margin-bottom: 14px; }
+.event-details dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 18px;
+  margin: 0;
+}
+.event-details dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.event-details dd { margin: 2px 0 0; font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
 
 h2, h3 { color: var(--navy); font-weight: 700; letter-spacing: -0.01em; }
 .muted { color: var(--muted); }
@@ -190,6 +191,53 @@ code {
 
 .field { margin: 0 0 22px; border: 0; padding: 0; min-width: 0; }
 .field > label, .field > legend { display: block; font-weight: 600; font-size: 0.95rem; margin-bottom: 8px; padding: 0; color: var(--ink-2); }
+.label-note { font-weight: 500; font-size: 0.85em; }
+
+/* Attendee information sub-card inside the form card. */
+.sub-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 18px 4px;
+  margin: 0 0 22px;
+  background: rgba(255, 255, 255, 0.6);
+}
+.sub-card h3 { margin: 0 0 14px; font-size: 1.05rem; }
+
+/* Native file input, styled; Cancel chip appears only once a file is chosen. */
+input[type="file"] {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font: inherit;
+  color: var(--ink-2);
+  background: #fff;
+}
+input[type="file"]:focus-visible { outline: none; border-color: var(--blue); box-shadow: var(--shadow-xs), var(--focus-ring); }
+input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: #fff;
+  cursor: pointer;
+}
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: var(--shadow-xs);
+  font-size: 0.9rem;
+}
+.file-chip .file-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-weight: 600; }
 
 input:not([type]),
 input[type="text"],
@@ -211,7 +259,20 @@ input::placeholder { color: #98a2b3; }
 input:focus-visible { outline: none; border-color: var(--blue); box-shadow: var(--shadow-xs), var(--focus-ring); }
 button:focus-visible { outline: 3px solid rgba(0, 130, 203, 0.45); outline-offset: 2px; }
 
-/* Supplier / Factory choice */
+/* Native selects in form fields (the "Other" organisation dropdown). */
+.field select {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font: inherit;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: var(--shadow-xs);
+}
+.field select:focus-visible { outline: none; border-color: var(--blue); box-shadow: var(--shadow-xs), var(--focus-ring); }
+
+/* Supplier / Factory / Other choice */
 .radios { display: flex; gap: 10px; flex-wrap: wrap; }
 .radios label {
   display: flex;
@@ -256,6 +317,14 @@ button:focus-visible { outline: 3px solid rgba(0, 130, 203, 0.45); outline-offse
 
 .field-error { color: var(--danger); font-size: 0.875rem; font-weight: 500; margin: 6px 0 0; }
 .field-error:empty { display: none; }
+
+/* Submit-time highlighting of missing/invalid fields and rows. */
+.field-invalid input, .field-invalid select, .field-invalid .ts-control {
+  border-color: var(--danger-fill) !important;
+  box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.15);
+}
+fieldset.field-invalid .radios label { border-color: var(--danger-fill); box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.12); }
+.org-row.field-invalid { border-color: var(--danger-fill); }
 
 .alert {
   background: var(--danger-soft);
@@ -303,7 +372,7 @@ button:focus-visible { outline: 3px solid rgba(0, 130, 203, 0.45); outline-offse
 .org-rows { list-style: none; margin: 12px 0 0; padding: 0; }
 .org-row {
   display: grid;
-  grid-template-columns: 1fr 150px auto;
+  grid-template-columns: 1fr auto;
   gap: 10px;
   align-items: center;
   padding: 10px 10px 10px 14px;
@@ -316,8 +385,6 @@ button:focus-visible { outline: 3px solid rgba(0, 130, 203, 0.45); outline-offse
 .org-row.is-entering { animation: row-in 0.45s var(--ease-spring) backwards; }
 .org-row.is-leaving { animation: row-out 0.22s ease-in forwards; }
 .org-row.is-full { background: var(--warn-soft); border-color: var(--warn-line); }
-.org-row .field-error { grid-column: 1 / -1; margin: 0; }
-.org-row input { padding: 8px 12px; }
 .org-name { overflow-wrap: anywhere; font-weight: 600; color: var(--ink-2); }
 .warn-text { color: var(--warn); }
 
@@ -364,6 +431,7 @@ button:focus-visible { outline: 3px solid rgba(0, 130, 203, 0.45); outline-offse
   transition: transform 0.18s var(--ease-spring), color 0.18s ease, border-color 0.18s ease;
 }
 .icon-btn:hover { color: var(--danger-fill); border-color: var(--danger-line); transform: rotate(90deg); }
+.icon-btn.small { width: 26px; height: 26px; font-size: 0.78rem; flex: none; }
 
 .link-btn { border: 0; background: transparent; color: var(--blue); cursor: pointer; padding: 8px 2px; font: inherit; font-weight: 600; }
 .link-btn:hover { color: var(--navy); }
@@ -550,6 +618,9 @@ td { font-variant-numeric: tabular-nums; }
 .badge.full, .badge.over { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
 .badge.new, .badge.pending { background: var(--info-soft); color: var(--info); border-color: #b9e6fe; }
 
+/* Small photo thumbnail in the admin participants table. */
+.photo-thumb { height: 40px; width: auto; border-radius: 6px; border: 1px solid var(--line); object-fit: cover; }
+
 /* ---------- Dialog ---------- */
 
 dialog {
@@ -572,9 +643,8 @@ dialog::backdrop { background: rgba(0, 43, 97, 0.35); backdrop-filter: blur(4px)
 /* ---------- Small screens ---------- */
 
 @media (max-width: 760px) {
-  /* Blur and continuously animating shapes are heavy on low-end phones: near-solid cards, still shapes. */
-  .bg-blobs span { animation: none; filter: blur(40px); }
-  .card, .toolbar, .tile, .chart-card, .table-wrap, .tabs {
+  /* Blur is heavy on low-end phones: near-solid cards. */
+  .card, .toolbar, .tile, .chart-card, .table-wrap, .tabs, .event-details {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: rgba(255, 255, 255, 0.94);
@@ -601,9 +671,8 @@ dialog::backdrop { background: rgba(0, 43, 97, 0.35); backdrop-filter: blur(4px)
   .tabs { display: flex; }
   .tabs button { flex: 1 1 auto; padding: 8px 10px; }
   .org-row { grid-template-columns: 1fr auto; }
-  .org-row > .org-name, .org-row > [data-field="other_name"] { grid-column: 1; grid-row: 1; }
+  .org-row > .org-name { grid-column: 1; grid-row: 1; }
   .org-row > .icon-btn { grid-column: 2; grid-row: 1; }
-  .org-row > [data-field="code"] { grid-column: 1 / -1; grid-row: 2; }
 }
 
 /* ---------- Reduced motion ---------- */
@@ -615,5 +684,4 @@ dialog::backdrop { background: rgba(0, 43, 97, 0.35); backdrop-filter: blur(4px)
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  .bg-blobs span { animation: none; }
 }
