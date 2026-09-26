@@ -33,9 +33,12 @@ function showConfirmation(payload, orgs) {
         <h3>Factories</h3>
         <ul>${orgNames('factory') || '<li>—</li>'}</ul>
       ` : ''}
+      <p><strong>Event Location:</strong> Crowne Plaza Dhaka Airport (Celestial Ballroom - Second Floor)</p>
       <p class="muted">To change or cancel your registration, contact the event team.</p>
       <button type="button" class="btn" id="register-another">Register another person</button>
     </div>`;
+  // The "* are required" / seat-limit note is only for the open form, not the confirmation view.
+  document.querySelector('.details-note')?.remove();
   root.querySelector('.confirmation').focus();
   root.querySelector('#register-another').addEventListener('click', () => window.location.reload());
 }
