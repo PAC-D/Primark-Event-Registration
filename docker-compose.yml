@@ -1,0 +1,18 @@
+services:
+  primark-app:
+    image: primark-app:slim
+    build: .
+    container_name: primark-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file: .env
+    # NODE_ENV=production not set: app marks session cookie Secure in production,
+    # and browsers drop Secure cookies over plain HTTP. Re-add when HTTPS enabled.
+    mem_limit: 512m
+    mem_reservation: 128m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
