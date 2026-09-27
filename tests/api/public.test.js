@@ -26,6 +26,37 @@ test('GET /api/organisations returns the event title and organisations without c
   assert.deepEqual(res.body, { event_title: 'Test Event', organisations });
 });
 
+test('a full organisation lists its seat-holders (name and designation only)', async () => {
+  const db = fakeDb({
+    tables: {
+      org_status: {
+        data: [
+          { id: 1, kind: 'supplier', name: 'Padma', seats_used: 2 },
+          { id: 2, kind: 'factory', name: 'Aspire', seats_used: 0 },
+        ],
+        error: null,
+      },
+      attendee_orgs: {
+        data: [
+          { org_id: 1, attendees: { name: 'Rahim Uddin', designation: 'Merchandiser', from_type: 'supplier' } },
+          { org_id: 1, attendees: { name: 'Salma Khatun', designation: 'QA Manager', from_type: 'supplier' } },
+          // Linked from the other side: holds no seat at Padma, so must not be listed.
+          { org_id: 1, attendees: { name: 'Linked Person', designation: 'Visitor', from_type: 'factory' } },
+        ],
+        error: null,
+      },
+    },
+  });
+  const res = await request(appWith(db)).get('/api/organisations');
+  const padma = res.body.organisations.find((o) => o.id === 1);
+  assert.deepEqual(padma.registrants, [
+    { name: 'Rahim Uddin', designation: 'Merchandiser' },
+    { name: 'Salma Khatun', designation: 'QA Manager' },
+  ]);
+  const aspire = res.body.organisations.find((o) => o.id === 2);
+  assert.equal('registrants' in aspire, false, 'an organisation with seats left exposes nothing');
+});
+
 test('POST /api/register saves the validated payload and returns 201', async () => {
   const db = fakeDb({ rpc: { register_attendee: () => ({ data: 'new-id', error: null }) } });
   const res = await request(appWith(db)).post('/api/register').send(body());

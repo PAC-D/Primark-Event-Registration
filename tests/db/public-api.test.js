@@ -57,6 +57,24 @@ describe('public API against the test database', { skip: skipReason }, () => {
     assert.deepEqual(row, { from_type: 'other', organisation_name: 'Maersk Bangladesh' });
   });
 
+  test('full organisations expose their seat-holders over the public API', async () => {
+    await request(app).post('/api/register').send(person('a@example.com', [pick(o.padma), pick(o.aspire)])).expect(201);
+    // A supplier-side attendee linked to Aspire holds no seat there and is never listed.
+    await request(app).post('/api/register').send({
+      from_type: 'supplier', name: 'Salma Khatun', designation: 'QA Manager',
+      email: 'b@example.com', phone: '+8801711000000', orgs: [pick(o.padma), pick(o.aspire)],
+    }).expect(201);
+    const orgs = await orgList();
+    assert.deepEqual(
+      orgs.find((x) => x.id === o.aspire.id).registrants,
+      [{ name: 'Rahim Uddin', designation: 'Merchandiser' }],
+    );
+    assert.equal(
+      'registrants' in orgs.find((x) => x.id === o.padma.id), false,
+      'Padma still has a free supplier seat, so it exposes nothing',
+    );
+  });
+
   test('pending organisations are hidden until approved', async () => {
     const pending = (await seedOrgs(db, {
       rainbow: { kind: 'factory', name: 'Rainbow Knit Ltd', status: 'pending', source: 'attendee' },

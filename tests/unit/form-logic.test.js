@@ -28,11 +28,9 @@ test('an own seat never counts as full even when at the limit', () => {
   assert.deepEqual(seatInfo(supplierOrg(2), 'supplier', true), { left: 1, full: false, label: '· 1 seat left' });
 });
 
-test('pickerOptions disables full orgs on the from side only', () => {
+test('pickerOptions lists org names only — seat status is not disclosed upfront', () => {
   const options = pickerOptions([supplierOrg(2), factoryOrg(1)], { kind: 'factory', fromType: 'factory' });
-  assert.equal(options[0].disabled, true);
-  const crossSide = pickerOptions([factoryOrg(1)], { kind: 'factory', fromType: 'supplier' });
-  assert.equal(crossSide[0].disabled, false);
+  assert.deepEqual(options, [{ value: '2', text: 'A Factory' }]);
 });
 
 test('buildPayload sends org_ids without codes for supplier/factory attendees', () => {
