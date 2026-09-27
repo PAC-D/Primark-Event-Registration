@@ -14,6 +14,23 @@ Express 5 on a Node host (Amazon Lightsail, Ubuntu) via `server.js`, plain HTML/
 | `ADMIN_PASSWORD` | Shared admin password |
 | `SESSION_SECRET` | 32+ random characters for signing the admin cookie |
 | `EVENT_TITLE` | Subtitle shown under the event title (set to `Bangladesh Origin`) |
+| `POWER_AUTOMATE_WEBHOOK_URL` | Optional. Power Automate HTTP trigger URL for attendee confirmation emails (see below). Empty = no emails. |
+
+## Email confirmations (optional)
+
+Set `POWER_AUTOMATE_WEBHOOK_URL` to a Power Automate **"When an HTTP request is received"** trigger URL and every
+successful registration posts a JSON payload to it. Build the flow to send the confirmation email with Outlook's
+**"Send an email (V2)"** action:
+
+- To: `email` · Subject: e.g. `You're registered — Primark Carton Nomination Program`
+- Body fields available: `name`, `email`, `phone`, `designation`, `from_type` (supplier/factory/other),
+  `organisation_name` (set for Other), `organisations` (array of selected supplier/factory names),
+  `event_name`, `event_subtitle`, `event_date`, `event_time`.
+
+Notes:
+- The send is **best effort**: if the webhook is down or slow the registration still succeeds (6 s timeout, warning in the log).
+- The HTTP trigger is a Premium connector — the flow owner needs a Power Automate Premium licence.
+- Leave the variable empty to disable emails entirely (default).
 
 Generate a session secret:
 ```bash
