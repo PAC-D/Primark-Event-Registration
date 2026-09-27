@@ -1,6 +1,7 @@
 import { MAX_ORGS_PER_KIND, validateRegistration } from '/shared/validate.js';
-import { ORGANISATION_OPTIONS, PHOTO_MAX_BYTES, SEAT_LIMITS } from '/shared/constants.js';
+import { ORGANISATION_OPTIONS, PHOTO_MAX_BYTES } from '/shared/constants.js';
 import { buildPayload, escapeHtml, orderRows, pickerOptions, seatInfo } from '/shared/form-logic.js';
+import { openRegistreeModal } from './registree-modal.js';
 
 const KINDS = [
   { kind: 'supplier', label: 'Supplier(s)', search: 'Search suppliers…', errorKey: 'suppliers' },
@@ -144,9 +145,8 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
     const container = event.target.closest('.field, .org-block, fieldset, .org-row');
     if (!container) return;
     container.classList.remove('field-invalid');
-    // Only clear this field's own error line (not a live "full" hint for the section).
     const errorEl = container.querySelector(':scope > .field-error, :scope div > .field-error');
-    if (errorEl && !errorEl.dataset.live) errorEl.textContent = '';
+    if (errorEl) errorEl.textContent = '';
   }
 
   // ----- supplier/factory pickers -----
@@ -157,7 +157,7 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
       maxOptions: 500,
       searchField: ['text'],
       render: {
-        option: (data, escape) => `<div class="picker-option">${escape(data.text)} <small class="${data.hint === '(full)' ? 'warn-text' : ''}">${escape(data.hint)}</small></div>`,
+        option: (data, escape) => `<div>${escape(data.text)}</div>`,
         item: (data, escape) => `<div>${escape(data.text)}</div>`,
         no_results: () => '<div class="no-results">No match.</div>',
       },
@@ -168,6 +168,13 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
       },
     },
   )]));
+
+  // ----- "View attendee" note for rows whose organisation is already full -----
+
+  function openRegistreeFor(orgId) {
+    const org = orgList.find((o) => o.id === orgId);
+    if (org) openRegistreeModal(org);
+  }
 
   // ----- organisation dropdown for "Other" (native select: nothing editable in the box) -----
 
@@ -254,14 +261,18 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
     const org = orgList.find((o) => o.id === row.org_id);
     const full = org ? seatInfo(org, state.fromType, own.has(row.org_id)).full : false;
     const pendingNote = !org ? ' <em class="muted">(pending approval)</em>' : '';
-    const fullNote = full ? ' <strong class="warn-text">full</strong>' : '';
     const classes = ['org-row'];
     if (full) classes.push('is-full');
     if (row.key === enteringKey) classes.push('is-entering');
     return `
       <li class="${classes.join(' ')}" data-key="${row.key}">
-        <span class="org-name">${escapeHtml(row.name)}${pendingNote}${fullNote}</span>
+        <span class="org-name">${escapeHtml(row.name)}${pendingNote}</span>
         <button type="button" class="icon-btn" data-remove="${row.key}" aria-label="Remove ${escapeHtml(row.name)}">✕</button>
+        ${full ? `
+          <p class="full-note">
+            Selected ${escapeHtml(org.kind)} attendee slot has already been filled.
+            <button type="button" class="view-attendee" data-view-attendee="${org.id}">View attendee</button>
+          </p>` : ''}
       </li>`;
   }
 
@@ -271,7 +282,7 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
     form.querySelector('[data-kind-sections]').hidden = isOther;
     form.querySelector('[data-other-org]').hidden = !isOther;
 
-    for (const { kind, label, errorKey } of KINDS) {
+    for (const { kind, label } of KINDS) {
       // Only the attending-from side is mandatory; the other side is optional (0–10).
       // (TomSelect rewrites the label's `for`, so target it with data-kind-label instead.)
       const labelEl = form.querySelector(`[data-kind-label="${kind}"]`);
@@ -288,26 +299,10 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
       picker.clearOptions();
       picker.addOptions(pickerOptions(orgList, {
         kind,
-        fromType: state.fromType,
-        ownSeatIds: own,
         selectedIds: new Set(rows.map((r) => r.org_id)),
       }));
       picker.refreshOptions(false);
       if (rows.length >= MAX_ORGS_PER_KIND) picker.disable(); else picker.enable();
-
-      // Live "already full" hint for the from side; a validation/supplier error wins over it.
-      const errEl = form.querySelector(`[data-error="${errorKey}"]`);
-      const fullNames = state.fromType === kind
-        ? rows
-            .map((r) => orgList.find((o) => o.id === r.org_id))
-            .filter((o) => o && seatInfo(o, kind, own.has(o.id)).full)
-            .map((o) => o.name)
-        : [];
-      if (errEl.dataset.live) { errEl.textContent = ''; delete errEl.dataset.live; }
-      if (fullNames.length && !errEl.textContent) {
-        errEl.textContent = `${fullNames.join('; ')} ${fullNames.length > 1 ? 'are' : 'is'} already full (limit ${SEAT_LIMITS[kind]}). Choose another ${kind} or contact the event team.`;
-        errEl.dataset.live = '1';
-      }
     }
     enteringKey = null;
   }
@@ -326,7 +321,7 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
   function clearErrors() {
     alertBox.hidden = true;
     alertBox.textContent = '';
-    form.querySelectorAll('.field-error').forEach((el) => { el.textContent = ''; delete el.dataset.live; });
+    form.querySelectorAll('.field-error').forEach((el) => { el.textContent = ''; });
     form.querySelectorAll('.field-invalid').forEach((el) => classListRemoveInvalid(el));
   }
   function classListRemoveInvalid(el) { el.classList.remove('field-invalid'); }
@@ -370,6 +365,11 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
   });
 
   form.addEventListener('click', (event) => {
+    const view = event.target.closest('[data-view-attendee]');
+    if (view) {
+      openRegistreeFor(Number(view.dataset.viewAttendee));
+      return;
+    }
     const remove = event.target.closest('[data-remove]');
     if (!remove) return;
     const key = Number(remove.dataset.remove);

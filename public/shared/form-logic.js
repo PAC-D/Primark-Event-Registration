@@ -18,13 +18,13 @@ export function seatInfo(org, fromType, ownSeat = false) {
   return { left, full: false, label: `· ${left} seat${left === 1 ? '' : 's'} left` };
 }
 
-export function pickerOptions(orgs, { kind, fromType = null, selectedIds = new Set(), ownSeatIds = new Set() }) {
+// Dropdown options deliberately carry no seat status: which organisations are full is not
+// disclosed at a glance. Fullness is only remarked on after the visitor picks such an org
+// (see the "already filled" note on full rows in the registration form).
+export function pickerOptions(orgs, { kind, selectedIds = new Set() }) {
   return orgs
     .filter((o) => o.kind === kind && !selectedIds.has(o.id))
-    .map((o) => {
-      const info = seatInfo(o, fromType, ownSeatIds.has(o.id));
-      return { value: String(o.id), text: o.name, hint: info.label, disabled: info.full };
-    });
+    .map((o) => ({ value: String(o.id), text: o.name }));
 }
 
 export function buildPayload({

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { SEAT_LIMITS } from '../../public/shared/constants.js';
 import { validateRegistration } from '../../public/shared/validate.js';
 import { callRpc, runQuery } from '../db.js';
 import { errors } from '../errors.js';
@@ -11,6 +12,24 @@ export function publicRoutes({ db, config }) {
     const organisations = await runQuery(
       db.from('org_status').select('id, kind, name, seats_used').eq('status', 'approved').order('name'),
     );
+    // Seat-holders of full organisations are listed publicly (name and designation only),
+    // so visitors can see who has registered there. Nothing is exposed while seats remain.
+    const fullById = new Map(
+      organisations.filter((o) => o.seats_used >= SEAT_LIMITS[o.kind]).map((o) => [o.id, o.kind]),
+    );
+    if (fullById.size) {
+      const links = await runQuery(
+        db.from('attendee_orgs')
+          .select('org_id, attendees!inner(name, designation, from_type)')
+          .in('org_id', [...fullById.keys()]),
+      );
+      for (const org of organisations) {
+        if (!fullById.has(org.id)) continue;
+        org.registrants = links
+          .filter((l) => l.org_id === org.id && l.attendees.from_type === org.kind)
+          .map((l) => ({ name: l.attendees.name, designation: l.attendees.designation }));
+      }
+    }
     res.set('Cache-Control', 'no-store');
     res.json({ event_title: config.eventTitle, organisations });
   });
