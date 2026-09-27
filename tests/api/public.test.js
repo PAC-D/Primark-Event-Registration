@@ -38,6 +38,47 @@ test('POST /api/register saves the validated payload and returns 201', async () 
   assert.equal('code' in call.args.p.orgs[0], false);
 });
 
+test('a successful registration posts a confirmation to the Power Automate webhook', async (t) => {
+  const posted = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    posted.push({ url, body: JSON.parse(init.body) });
+    return { ok: true, status: 202 };
+  });
+  const db = fakeDb({
+    rpc: { register_attendee: () => ({ data: 'new-id', error: null }) },
+    tables: { organisations: { data: [{ id: 2, name: 'AB Apparels Ltd' }, { id: 1, name: 'ABA FASHIONS LTD' }], error: null } },
+  });
+  const config = { ...testConfig, powerAutomateWebhookUrl: 'https://flows.example.com/trigger/abc' };
+  const res = await request(createApp({ db, config })).post('/api/register').send(body());
+  assert.equal(res.status, 201);
+  await new Promise((r) => setTimeout(r, 20)); // fire-and-forget flush
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].url, 'https://flows.example.com/trigger/abc');
+  assert.equal(posted[0].body.type, 'registration_confirmation');
+  assert.equal(posted[0].body.email, 'rahim@example.com');
+  assert.equal(posted[0].body.event_name, 'Primark Carton Nomination Program');
+  assert.deepEqual(posted[0].body.organisations.sort(), ['AB Apparels Ltd', 'ABA FASHIONS LTD'].sort());
+});
+
+test('registration still succeeds when the webhook fails, and the honeypot never emails', async (t) => {
+  const posted = [];
+  t.mock.method(globalThis, 'fetch', async () => { posted.push(1); throw new Error('flow down'); });
+  const db = fakeDb({ rpc: { register_attendee: () => ({ data: 'ok', error: null }) } });
+  const config = { ...testConfig, powerAutomateWebhookUrl: 'https://flows.example.com/trigger/abc' };
+  const app = createApp({ db, config });
+
+  t.mock.method(console, 'warn', () => {});
+  const ok = await request(app).post('/api/register').send(body());
+  assert.equal(ok.status, 201);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(posted.length, 1, 'webhook attempted even though it failed');
+
+  const honey = await request(app).post('/api/register').send({ ...body(), website: 'http://spam.example' });
+  assert.equal(honey.status, 201);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(posted.length, 1, 'honeypot registration must not trigger the webhook');
+});
+
 test('an invalid body returns 400 with field messages and never reaches the database', async () => {
   const db = fakeDb();
   const res = await request(appWith(db)).post('/api/register').send({ ...body(), email: 'nope', orgs: [] });

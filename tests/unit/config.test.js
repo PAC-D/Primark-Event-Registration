@@ -18,9 +18,15 @@ test('returns a config object when every variable is set', () => {
     adminPassword: 'pw',
     sessionSecret: 'a'.repeat(32),
     eventTitle: 'Supplier Day',
+    powerAutomateWebhookUrl: '',
     isProduction: false,
     maintenanceMode: false,
   });
+});
+
+test('the Power Automate webhook URL is optional and trimmed', () => {
+  assert.equal(loadConfig(valid).powerAutomateWebhookUrl, '');
+  assert.equal(loadConfig({ ...valid, POWER_AUTOMATE_WEBHOOK_URL: ' https://flows.example/x ' }).powerAutomateWebhookUrl, 'https://flows.example/x');
 });
 
 test('lists every missing or blank variable', () => {

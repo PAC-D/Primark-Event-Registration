@@ -15,6 +15,8 @@ export function loadConfig(env = process.env) {
     adminPassword: env.ADMIN_PASSWORD,
     sessionSecret: env.SESSION_SECRET,
     eventTitle: env.EVENT_TITLE.trim(),
+    // Optional: Power Automate webhook trigger URL for confirmation emails. Empty = emails disabled.
+    powerAutomateWebhookUrl: (env.POWER_AUTOMATE_WEBHOOK_URL ?? '').trim(),
     isProduction: env.NODE_ENV === 'production' || Boolean(env.VERCEL),
     maintenanceMode: TRUE_FLAGS.has((env.MAINTENANCE_MODE ?? '').trim().toLowerCase()),
   };
