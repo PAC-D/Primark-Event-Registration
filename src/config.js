@@ -1,4 +1,5 @@
 const REQUIRED = ['SUPABASE_URL', 'SUPABASE_SECRET_KEY', 'ADMIN_PASSWORD', 'SESSION_SECRET', 'EVENT_TITLE'];
+const TRUE_FLAGS = new Set(['1', 'true', 'yes', 'on']);
 
 export function loadConfig(env = process.env) {
   const missing = REQUIRED.filter((name) => !env[name] || !env[name].trim());
@@ -15,5 +16,6 @@ export function loadConfig(env = process.env) {
     sessionSecret: env.SESSION_SECRET,
     eventTitle: env.EVENT_TITLE.trim(),
     isProduction: env.NODE_ENV === 'production' || Boolean(env.VERCEL),
+    maintenanceMode: TRUE_FLAGS.has((env.MAINTENANCE_MODE ?? '').trim().toLowerCase()),
   };
 }

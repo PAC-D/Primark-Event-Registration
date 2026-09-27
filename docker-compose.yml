@@ -12,7 +12,8 @@ services:
     mem_limit: 512m
     mem_reservation: 128m
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
+      # /maintenance stays 200 in normal and maintenance mode; "/" is 503 while MAINTENANCE_MODE is on.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/maintenance').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
