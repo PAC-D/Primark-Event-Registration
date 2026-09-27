@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scheduled maintenance — Primark Carton Nomination Program</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/brand/icon-512.png">
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
+  <meta name="theme-color" content="#002b61">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <style>
+    /* Self-contained by design: the page keeps working even if the rest of the site is being changed. */
+    :root {
+      --navy: #002b61;
+      --blue: #0082cb;
+      --blue-dark: #006aa6;
+      --sky: #00aeef;
+      --primark: #00a0d5;
+      --ink: #101828;
+      --muted: #667085;
+      --glass: rgba(255, 255, 255, 0.72);
+      --glass-border: rgba(255, 255, 255, 0.85);
+      --shadow-glass: 0 12px 32px rgba(0, 43, 97, 0.1), 0 1px 2px rgba(16, 24, 40, 0.05);
+      --focus-ring: 0 0 0 4px rgba(0, 130, 203, 0.18);
+      --radius-card: 16px;
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      color: var(--ink);
+      background: linear-gradient(160deg, var(--navy) 0%, #00438c 38%, var(--blue) 70%, var(--sky) 100%) fixed;
+      overflow-x: hidden;
+    }
+
+    /* Animated sky: slowly shifting hue of the same brand blues */
+    @keyframes sky-drift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .sky {
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      background: linear-gradient(120deg, var(--navy), #003a7d 30%, var(--blue) 55%, var(--sky) 80%, #6fd3ff);
+      background-size: 220% 220%;
+      animation: sky-drift 26s var(--ease-out) infinite;
+    }
+    /* Glassy orbs floating in the sky */
+    .orb {
+      position: fixed;
+      z-index: -1;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.04) 70%);
+      filter: blur(2px);
+      opacity: 0.55;
+    }
+    .orb-1 { width: 38vmin; height: 38vmin; top: -8vmin; left: -6vmin; animation: float-a 19s ease-in-out infinite; }
+    .orb-2 { width: 52vmin; height: 52vmin; bottom: -18vmin; right: -12vmin; animation: float-b 24s ease-in-out infinite; }
+    .orb-3 { width: 16vmin; height: 16vmin; top: 24%; right: 14%; animation: float-a 15s ease-in-out infinite reverse; }
+    .orb-4 { width: 10vmin; height: 10vmin; bottom: 22%; left: 16%; animation: float-b 21s ease-in-out infinite; }
+    @keyframes float-a {
+      0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+      50%      { transform: translate3d(4vmin, 6vmin, 0) scale(1.08); }
+    }
+    @keyframes float-b {
+      0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+      50%      { transform: translate3d(-5vmin, -4vmin, 0) scale(0.94); }
+    }
+
+    /* Brand band, same silhouette as the main site */
+    .brand-band {
+      background: var(--glass);
+      border-bottom: 1px solid var(--glass-border);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      box-shadow: var(--shadow-glass);
+    }
+    .brand-inner {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .logo-chip {
+      display: inline-flex;
+      padding: 8px 14px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(16, 24, 40, 0.12);
+      border: 1px solid var(--glass-border);
+      flex: 0 0 auto;
+    }
+    .brand-logo { display: block; height: 34px; width: auto; }
+    .brand-logo.pacd { height: 38px; }
+    .brand-title h1 {
+      margin: 0;
+      font-size: clamp(1.05rem, 2.6vw, 1.45rem);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--navy);
+      text-align: center;
+    }
+    .brand-title p {
+      margin: 2px 0 0;
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px;
+    }
+    .card {
+      width: min(560px, 100%);
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-card);
+      box-shadow: var(--shadow-glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      padding: clamp(28px, 5vw, 44px);
+      text-align: center;
+    }
+
+    /* Slow-rotating progress arc */
+    .gauge {
+      width: 132px;
+      height: 132px;
+      margin: 0 auto 22px;
+      position: relative;
+    }
+    .gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .gauge .track { fill: none; stroke: rgba(0, 43, 97, 0.14); stroke-width: 10; }
+    .gauge .runner {
+      fill: none;
+      stroke: url(#runner-grad);
+      stroke-width: 10;
+      stroke-linecap: round;
+      stroke-dasharray: 289;
+      stroke-dashoffset: 210;
+      animation: gauge-turn 3.2s linear infinite;
+    }
+    @keyframes gauge-turn {
+      0%   { stroke-dashoffset: 289; transform: rotate(0deg); }
+      50%  { stroke-dashoffset: 150; }
+      100% { stroke-dashoffset: 289; transform: rotate(360deg); }
+    }
+    .gauge .core {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--sky);
+      box-shadow: 0 0 0 0 rgba(0, 174, 239, 0.5);
+      animation: dot-pulse 2s var(--ease-out) infinite;
+    }
+    @keyframes dot-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(0, 174, 239, 0.5); }
+      70%  { box-shadow: 0 0 0 16px rgba(0, 174, 239, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(0, 174, 239, 0); }
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--blue-dark);
+      background: rgba(0, 130, 203, 0.1);
+      border: 1px solid rgba(0, 130, 203, 0.22);
+      padding: 6px 14px;
+      border-radius: 999px;
+      margin-bottom: 14px;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: clamp(1.7rem, 4.5vw, 2.3rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--navy);
+    }
+    .card p {
+      margin: 0 0 14px;
+      color: #344054;
+      font-size: 1.02rem;
+      line-height: 1.65;
+    }
+    .card p:last-of-type { margin-bottom: 0; }
+    .muted { color: var(--muted); font-size: 0.92rem; }
+
+    .progress {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(0, 43, 97, 0.1);
+      overflow: hidden;
+      margin: 26px 0 26px;
+    }
+    .progress .shimmer {
+      width: 42%;
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--blue), var(--sky));
+      animation: shimmer-slide 2.4s var(--ease-out) infinite;
+    }
+    @keyframes shimmer-slide {
+      0%   { transform: translateX(-110%); }
+      100% { transform: translateX(280%); }
+    }
+
+    .hint {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+    .hint svg { flex: 0 0 auto; }
+    footer {
+      padding: 18px 20px 26px;
+      text-align: center;
+      font-size: 0.82rem;
+      color: rgba(255, 255, 255, 0.75);
+    }
+
+    /* Entrance choreography */
+    .anim-rise { opacity: 0; transform: translateY(18px); animation: rise 0.7s var(--ease-spring) forwards; animation-delay: calc(var(--i, 0) * 0.12s); }
+    @keyframes rise {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 640px) {
+      .brand-inner { justify-content: center; }
+      .brand-logo.primark { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .sky, .orb, .gauge .runner, .dot, .shimmer { animation: none; }
+      .gauge .runner { stroke-dashoffset: 150; }
+      .anim-rise { animation-duration: 0.01s; animation-delay: 0s; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sky" aria-hidden="true"></div>
+  <div class="orb orb-1" aria-hidden="true"></div>
+  <div class="orb orb-2" aria-hidden="true"></div>
+  <div class="orb orb-3" aria-hidden="true"></div>
+  <div class="orb orb-4" aria-hidden="true"></div>
+
+  <header class="brand-band anim-rise">
+    <div class="brand-inner">
+      <span class="logo-chip"><img class="brand-logo pacd" src="/brand/pacd.png" alt="PacD"></span>
+      <div class="brand-title">
+        <h1>Primark Carton Nomination Program</h1>
+        <p>Scheduled maintenance</p>
+      </div>
+      <span class="logo-chip"><img class="brand-logo primark" src="/brand/primark.png" alt="Primark"></span>
+    </div>
+  </header>
+
+  <main>
+    <div class="card anim-rise" style="--i: 1">
+      <div class="gauge" aria-hidden="true">
+        <svg viewBox="0 0 108 108">
+          <defs>
+            <linearGradient id="runner-grad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#0082cb"></stop>
+              <stop offset="100%" stop-color="#00aeef"></stop>
+            </linearGradient>
+          </defs>
+          <circle class="track" cx="54" cy="54" r="46"></circle>
+          <circle class="runner" cx="54" cy="54" r="46"></circle>
+        </svg>
+        <span class="core"><span class="dot"></span></span>
+      </div>
+
+      <span class="status-chip"><span class="dot" aria-hidden="true"></span> Maintenance in progress</span>
+      <h2>We&rsquo;ll be back soon</h2>
+      <p>The <strong>Primark Carton Nomination Program</strong> is temporarily offline while we make a few improvements behind the scenes.</p>
+      <p class="muted">Everything you entered is safe — registrations and admin data are untouched. The event details remain the same, and nominations will reopen shortly.</p>
+
+      <div class="progress" aria-hidden="true"><div class="shimmer"></div></div>
+
+      <p class="hint">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        Please check back in a little while — we won&rsquo;t be long.
+      </p>
+    </div>
+  </main>
+
+  <footer class="anim-rise" style="--i: 2">
+    Questions in the meantime? Reach out to the PacD & Primark event team.
+  </footer>
+</body>
+</html>

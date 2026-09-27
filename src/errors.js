@@ -18,6 +18,7 @@ export const errors = {
   unauthorised: (message = 'Please log in again.') => new AppError('UNAUTHORISED', 401, message),
   notFound: () => new AppError('NOT_FOUND', 404, RECORD_GONE),
   dbUnavailable: () => new AppError('DB_UNAVAILABLE', 503, 'Service is busy, please try again in a moment.'),
+  maintenance: () => new AppError('MAINTENANCE', 503, 'The site is down for scheduled maintenance. Please try again shortly.'),
   internal: (cause) => Object.assign(new AppError('INTERNAL', 500, 'Something went wrong, please try again.'), { cause }),
 };
 

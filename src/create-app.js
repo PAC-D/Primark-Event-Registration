@@ -15,6 +15,22 @@ export function createApp({ db, config, loginDelayMs = 1000 }) {
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
 
+  // MAINTENANCE_MODE: pages are answered with the maintenance page in place (503, never a
+  // redirect — behind a prefix-stripping proxy a Location header moves the browser to the
+  // wrong URL); API calls get a 503 MAINTENANCE error instead of HTML.
+  if (config.maintenanceMode) {
+    app.use((req, res, next) => {
+      const pagePath = req.path; // not `path`: don't shadow the node:path import below
+      if (pagePath.startsWith('/maintenance') || pagePath.startsWith('/brand') || pagePath.startsWith('/favicon')) {
+        return next();
+      }
+      if (pagePath.startsWith('/api')) {
+        return next(errors.maintenance());
+      }
+      res.status(503).sendFile(path.join(__dirname, '..', 'public', 'maintenance.html'));
+    });
+  }
+
   // Served before express.static so "/" always maps to the registration page on any host.
   app.get('/', (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
 
