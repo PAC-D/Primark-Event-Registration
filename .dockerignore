@@ -1,0 +1,17 @@
+.git
+.claude
+.env
+.env.test
+.env.example
+.env.test.example
+node_modules
+tests
+docs
+supabase
+scripts
+vercel.json
+Dockerfile
+.dockerignore
+*.md
+backups
+db-*.sql
