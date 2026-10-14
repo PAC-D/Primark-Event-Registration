@@ -12,6 +12,9 @@ const STATUS = { missing: 'Missing', registered: 'Registered', full: 'Full' };
 
 const view = { tab: 'participants', search: '', side: 'all', status: 'all' };
 let data = null;
+let attendanceDays = null;
+let attendanceData = null;
+let attendanceDayId = '';
 let modalCleanup = null;
 
 const formatTime = (iso) => new Date(iso).toLocaleString('en-GB', {
@@ -41,7 +44,8 @@ async function loadData() {
   $('#updated-at').textContent = `Updated ${formatTime(data.generated_at)}`;
   renderTiles();
   renderCharts(data, { onCoverageClick: showCoverage });
-  renderTab({ animate: true });
+  if (view.tab === 'attendance') await loadAttendanceTab();
+  else renderTab({ animate: true });
 }
 
 // A chart slice or legend "View" opens the Suppliers/Factories tab filtered to that status.
@@ -175,6 +179,45 @@ function renderPending() {
   );
 }
 
+function renderAttendance() {
+  if (!attendanceDays) return '<p class="muted empty">Loading attendance…</p>';
+  if (!attendanceDays.length) return '<p class="muted empty">No event days exist yet.</p>';
+  if (!attendanceData) return '<p class="muted empty">Loading attendance…</p>';
+  const query = view.search.trim().toLocaleLowerCase();
+  const rows = attendanceData.rows.filter((row) => !query ||
+    [row.name, row.designation, row.organisation, row.attendance_status, row.registration_status]
+      .some((value) => String(value ?? '').toLocaleLowerCase().includes(query)));
+  const s = attendanceData.summary;
+  return `<div class="attendance-summary">
+    <div class="attendance-stat"><span class="muted">Registered</span><strong>${s.registered}</strong></div>
+    <div class="attendance-stat"><span class="muted">Present</span><strong>${s.present}</strong></div>
+    <div class="attendance-stat"><span class="muted">Pending</span><strong>${s.pending}</strong></div>
+    ${s.inactive ? `<div class="attendance-stat"><span class="muted">Inactive</span><strong>${s.inactive}</strong></div>` : ''}
+  </div>${table(
+    ['Name', 'Designation', 'Organisation', 'Registration', 'Attendance', 'First check-in', 'Scanner'],
+    rows.map((row) => [
+      escapeHtml(row.name), escapeHtml(row.designation || '—'), escapeHtml(row.organisation),
+      `<span class="badge ${escapeHtml(row.registration_status)}">${escapeHtml(row.registration_status)}</span>`,
+      `<span class="badge ${escapeHtml(row.attendance_status)}">${row.attendance_status === 'present' ? 'Present' : 'Pending'}</span>`,
+      row.checked_in_at ? formatTime(row.checked_in_at) : '—', escapeHtml(row.device_id || '—'),
+    ]),
+    'No attendees match.',
+  )}`;
+}
+
+async function loadAttendanceTab() {
+  attendanceData = null;
+  renderTab();
+  if (!attendanceDays) attendanceDays = (await api('/api/admin/attendance-days')).days;
+  if (!attendanceDays.length) { renderTab({ animate: true }); return; }
+  if (!attendanceDays.some((day) => day.id === attendanceDayId)) {
+    attendanceDayId = (attendanceDays.find((day) => day.scan_enabled) ?? attendanceDays[0]).id;
+  }
+  renderChips();
+  attendanceData = await api(`/api/admin/attendance?event_day_id=${encodeURIComponent(attendanceDayId)}`);
+  renderTab({ animate: true });
+}
+
 function renderChips() {
   const chip = (group, value, label) =>
     `<button type="button" class="chip" data-chip-group="${group}" data-chip-value="${value}" aria-pressed="${view[group] === value}">${label}</button>`;
@@ -183,6 +226,10 @@ function renderChips() {
     chips = [['all', 'All'], ['supplier', 'From supplier'], ['factory', 'From factory'], ['other', 'From other']].map(([v, l]) => chip('side', v, l));
   } else if (view.tab === 'supplier' || view.tab === 'factory') {
     chips = [['all', 'All'], ['missing', 'Missing'], ['registered', 'Registered'], ['full', 'Full']].map(([v, l]) => chip('status', v, l));
+  } else if (view.tab === 'attendance' && attendanceDays?.length) {
+    chips = [`<label class="field-inline" for="attendance-day">Event day</label><select id="attendance-day">
+      ${attendanceDays.map((day) => `<option value="${escapeHtml(day.id)}" ${day.id === attendanceDayId ? 'selected' : ''}>${escapeHtml(day.event.name)} · ${escapeHtml(day.label)} · ${escapeHtml(day.event_date)}</option>`).join('')}
+    </select><button type="button" class="btn" data-attendance-export>Export attendance</button>`];
   }
   $('#chips').innerHTML = chips.join('');
 }
@@ -190,6 +237,7 @@ function renderChips() {
 function renderTabContent() {
   if (view.tab === 'participants') return renderParticipants();
   if (view.tab === 'pending') return renderPending();
+  if (view.tab === 'attendance') return renderAttendance();
   return renderOrganisations(view.tab);
 }
 
@@ -356,12 +404,29 @@ async function exportExcel() {
   URL.revokeObjectURL(url);
 }
 
-async function downloadCards(eventId, button) {
+async function exportAttendance() {
+  if (!attendanceDayId) throw new Error('Choose an event day.');
+  const res = await fetch(`/api/admin/attendance/export?event_day_id=${encodeURIComponent(attendanceDayId)}`, { credentials: 'same-origin' });
+  if (res.status === 401) throw Object.assign(new Error('Please log in again.'), { status: 401 });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || 'Attendance export failed.');
+  }
+  const blob = await res.blob();
+  const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'attendance.xlsx';
+  const url = URL.createObjectURL(blob);
+  const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+}
+
+async function downloadCards(eventId, registrationIds, button) {
   button.disabled = true;
   button.textContent = 'Generating PDF…';
   try {
     const res = await fetch(`/api/admin/events/${eventId}/cards.pdf`, {
-      method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/pdf' },
+      method: 'POST', credentials: 'same-origin',
+      headers: { Accept: 'application/pdf', 'Content-Type': 'application/json' },
+      body: JSON.stringify(registrationIds ? { registration_ids: registrationIds } : {}),
     });
     if (res.status === 401) throw Object.assign(new Error('Please log in again.'), { status: 401 });
     if (!res.ok) {
@@ -379,7 +444,7 @@ async function downloadCards(eventId, button) {
     closeModal();
   } finally {
     button.disabled = false;
-    button.textContent = 'Generate and download PDF';
+    button.textContent = button.dataset.defaultLabel;
   }
 }
 
@@ -394,23 +459,71 @@ async function openCards() {
         ${events.map((event) => `<option value="${escapeHtml(event.id)}">${escapeHtml(event.name)} — ${event.confirmed_registrations} confirmed</option>`).join('')}
       </select>
     </div>
-    <p class="alert"><strong>Important:</strong> generating a new batch revokes previously generated QR cards for the selected registrations.</p>
+    <div class="field">
+      <label for="card-search">Find attendees</label>
+      <input id="card-search" type="search" placeholder="Search name or company…">
+    </div>
+    <div class="card-selection-head">
+      <label><input id="card-select-visible" type="checkbox"> Select visible</label>
+      <strong id="card-selected-count">0 selected</strong>
+    </div>
+    <div class="card-selection" id="card-selection"><p class="muted empty">Loading attendees…</p></div>
+    <p class="alert"><strong>QR policy:</strong> an attendee keeps the same QR on every reprint. Printing newly registered people does not change previously issued cards.</p>
     <p class="muted">The PDF uses one exact 8.56 cm × 5.4 cm landscape card per page.</p>
     <p class="alert" id="modal-error" role="alert" hidden></p>
     <div class="modal-actions">
       <button type="button" class="btn" data-close>Cancel</button>
-      <button type="button" class="btn primary" id="generate-cards">Generate and download PDF</button>
+      <button type="button" class="btn" id="generate-all" data-default-label="Print all">Print all</button>
+      <button type="button" class="btn primary" id="generate-cards" data-default-label="Print selected">Print selected</button>
     </div>`);
-  $('#generate-cards').addEventListener('click', async () => {
-    const button = $('#generate-cards');
-    const eventId = $('#card-event').value;
+  let registrations = [];
+  const selected = new Set();
+
+  const renderChoices = () => {
+    const query = $('#card-search').value.trim().toLocaleLowerCase();
+    const visible = registrations.filter((item) => !query || `${item.name} ${item.company}`.toLocaleLowerCase().includes(query));
+    $('#card-selection').innerHTML = visible.length ? visible.map((item) => `
+      <label class="card-choice">
+        <input type="checkbox" value="${escapeHtml(item.id)}" ${selected.has(item.id) ? 'checked' : ''}>
+        <span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.company)}</small></span>
+        <span class="badge ${item.has_reusable_qr ? 'present' : 'pending'}">${item.has_reusable_qr ? 'QR saved' : 'New QR'}</span>
+      </label>`).join('') : '<p class="muted empty">No attendees match.</p>';
+    $('#card-selected-count').textContent = `${selected.size} selected`;
+    $('#card-select-visible').checked = visible.length > 0 && visible.every((item) => selected.has(item.id));
+    $('#generate-cards').disabled = selected.size === 0;
+    $('#card-selection').querySelectorAll('input').forEach((input) => input.addEventListener('change', () => {
+      if (input.checked) selected.add(input.value); else selected.delete(input.value);
+      renderChoices();
+    }));
+  };
+
+  const loadChoices = async () => {
+    selected.clear();
+    $('#card-selection').innerHTML = '<p class="muted empty">Loading attendees…</p>';
+    const result = await api(`/api/admin/events/${$('#card-event').value}/card-registrations`);
+    registrations = result.registrations;
+    renderChoices();
+  };
+
+  const generate = async (button, ids) => {
     try {
-      await downloadCards(eventId, button);
+      await downloadCards($('#card-event').value, ids, button);
     } catch (err) {
       if (err.status === 401) showLogin();
       else showModalError(escapeHtml(err.message));
     }
+  };
+  $('#generate-cards').addEventListener('click', () => generate($('#generate-cards'), [...selected]));
+  $('#generate-all').addEventListener('click', () => generate($('#generate-all'), undefined));
+  $('#card-event').addEventListener('change', () => guarded(loadChoices));
+  $('#card-search').addEventListener('input', renderChoices);
+  $('#card-select-visible').addEventListener('change', (event) => {
+    const query = $('#card-search').value.trim().toLocaleLowerCase();
+    registrations.filter((item) => !query || `${item.name} ${item.company}`.toLocaleLowerCase().includes(query))
+      .forEach((item) => event.target.checked ? selected.add(item.id) : selected.delete(item.id));
+    renderChoices();
   });
+  await loadChoices();
 }
 
 // ---------- events ----------
@@ -421,7 +534,8 @@ document.addEventListener('click', (event) => {
   const d = button.dataset;
   if (d.tab) {
     Object.assign(view, { tab: d.tab, side: 'all', status: 'all' });
-    renderTab({ animate: true });
+    if (d.tab === 'attendance') guarded(loadAttendanceTab);
+    else renderTab({ animate: true });
   } else if (d.chipGroup) {
     view[d.chipGroup] = d.chipValue;
     renderTab({ animate: true });
@@ -432,7 +546,14 @@ document.addEventListener('click', (event) => {
     await loadData();
   });
   else if (d.merge) openMerge(d.merge);
+  else if ('attendanceExport' in d) guarded(exportAttendance);
   else if ('close' in d) closeModal();
+});
+
+document.addEventListener('change', (event) => {
+  if (event.target.id !== 'attendance-day') return;
+  attendanceDayId = event.target.value;
+  guarded(loadAttendanceTab);
 });
 
 $('#search').addEventListener('input', (event) => {
@@ -464,6 +585,8 @@ $('#export').addEventListener('click', () => guarded(exportExcel));
 $('#logout').addEventListener('click', async () => {
   await api('/api/admin/logout', { method: 'POST' }).catch(() => {});
   data = null;
+  attendanceDays = null;
+  attendanceData = null;
   showLogin();
 });
 

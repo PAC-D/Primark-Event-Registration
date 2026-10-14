@@ -3,7 +3,9 @@ import { fileURLToPath } from 'node:url';
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 import { callRpc, runQuery } from '../db.js';
-import { createCredential } from './credential.js';
+import {
+  createCredential, credentialHash, normaliseFallbackCode, openCredential, sealCredential,
+} from './credential.js';
 import { PHOTO_BUCKET } from './photo.js';
 
 const MM = 72 / 25.4;
@@ -61,19 +63,40 @@ export async function listCardEvents(db) {
   return events.map((event) => ({ ...event, confirmed_registrations: counts.get(event.id) ?? 0 }));
 }
 
-export async function loadCardBatch(db, eventId) {
+export async function loadCardBatch(db, eventId, registrationIds) {
+  let registrationQuery = db.from('event_registrations')
+    .select('id, attendees(name, from_type, organisation_name, photo_path), registration_orgs(kind, name, code)')
+    .eq('event_id', eventId)
+    .eq('status', 'confirmed');
+  if (registrationIds?.length) registrationQuery = registrationQuery.in('id', registrationIds);
   const [events, rows] = await Promise.all([
     runQuery(db.from('events')
       .select('id, code, name, subtitle, venue, organiser, timezone, starts_at, status')
       .eq('id', eventId)),
-    runQuery(db.from('event_registrations')
-      .select('id, attendees(name, from_type, organisation_name, photo_path), registration_orgs(kind, name, code)')
-      .eq('event_id', eventId)
-      .eq('status', 'confirmed')),
+    runQuery(registrationQuery),
   ]);
   const event = events[0];
   if (!event) return null;
   return { event, cards: mapCardRows(event, rows) };
+}
+
+export async function listCardRegistrations(db, eventId) {
+  const batch = await loadCardBatch(db, eventId);
+  if (!batch) return null;
+  const active = batch.cards.length ? await runQuery(db.from('registration_credentials')
+    .select('registration_id, print_payload')
+    .in('registration_id', batch.cards.map((card) => card.registrationId))
+    .eq('status', 'active')) : [];
+  const reusable = new Set(active.filter((row) => row.print_payload).map((row) => row.registration_id));
+  return {
+    event: batch.event,
+    registrations: batch.cards.map((card) => ({
+      id: card.registrationId,
+      name: card.name,
+      company: card.company,
+      has_reusable_qr: reusable.has(card.registrationId),
+    })),
+  };
 }
 
 async function loadPhoto(db, card) {
@@ -209,23 +232,52 @@ export async function renderCardsPdf({ event, cards, credentials }) {
   return complete;
 }
 
-export async function generateCardBatch(db, eventId) {
-  const batch = await loadCardBatch(db, eventId);
+function candidateItem(card, secret) {
+  const credential = createCredential();
+  return {
+    credential,
+    item: {
+      registration_id: card.registrationId,
+      token_hash: credential.tokenHash,
+      fallback_code_hash: credential.fallbackHash,
+      print_payload: sealCredential(credential, secret),
+    },
+  };
+}
+
+function recoveredCredential(row, secret) {
+  const credential = openCredential(row.print_payload, secret);
+  if (credentialHash(credential.token) !== row.token_hash
+      || credentialHash(normaliseFallbackCode(credential.fallback)) !== row.fallback_code_hash) {
+    throw new Error('Stored printable credential failed its integrity check.');
+  }
+  return credential;
+}
+
+export async function generateCardBatch(db, eventId, { registrationIds, secret } = {}) {
+  const batch = await loadCardBatch(db, eventId, registrationIds);
   if (!batch) return null;
   if (!batch.cards.length) return { ...batch, empty: true };
+  if (registrationIds?.length && batch.cards.length !== registrationIds.length) return { ...batch, invalidSelection: true };
 
   const cards = await loadPhotos(db, batch.cards);
-  const credentials = cards.map(() => createCredential());
-  const pdf = await renderCardsPdf({ event: batch.event, cards, credentials });
-  await callRpc(db, 'issue_event_credentials', {
+  const candidates = cards.map((card) => candidateItem(card, secret));
+  const prepared = await callRpc(db, 'prepare_event_credentials', {
     p_event_id: eventId,
-    p_items: cards.map((card, index) => ({
-      registration_id: card.registrationId,
-      token_hash: credentials[index].tokenHash,
-      fallback_code_hash: credentials[index].fallbackHash,
-    })),
+    p_items: candidates.map(({ item }) => item),
   });
-  return { ...batch, cards, pdf };
+  const byRegistration = new Map(prepared.map((row) => [row.registration_id, row]));
+  const credentials = cards.map((card) => {
+    const row = byRegistration.get(card.registrationId);
+    if (!row) throw new Error('Database did not return a prepared card credential.');
+    return recoveredCredential(row, secret);
+  });
+  const pdf = await renderCardsPdf({ event: batch.event, cards, credentials });
+  return {
+    ...batch, cards, pdf,
+    issued: prepared.filter((row) => row.issued).length,
+    reused: prepared.filter((row) => !row.issued).length,
+  };
 }
 
 export function cardPdfFilename(event) {

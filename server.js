@@ -1,6 +1,8 @@
 // Express entry point. The default export keeps platform-less hosts (Lightsail, any Node host)
 // and old serverless setups compatible; standalone it also serves public/ and listens on a port.
 import express from 'express';
+import { readFileSync } from 'node:fs';
+import https from 'node:https';
 import { loadConfig } from './src/config.js';
 import { createApp } from './src/create-app.js';
 import { createDb } from './src/db.js';
@@ -15,7 +17,13 @@ if (!process.env.VERCEL) {
   const port = Number(process.env.PORT) || 3000;
   // Keep an explicit reference to the listener. The cleanup timers below are deliberately
   // unref'd, so the HTTP server must be the process's authoritative long-lived handle.
-  const server = app.listen(port, () => console.log(`Listening on http://localhost:${port}`));
+  const useHttps = Boolean(config.httpsKeyPath && config.httpsCertPath);
+  const server = useHttps
+    ? https.createServer({
+      key: readFileSync(config.httpsKeyPath),
+      cert: readFileSync(config.httpsCertPath),
+    }, app).listen(port, () => console.log(`Listening on https://localhost:${port}`))
+    : app.listen(port, () => console.log(`Listening on http://localhost:${port}`));
   server.ref();
   server.on('error', (error) => {
     console.error(`Server failed: ${error.message}`);

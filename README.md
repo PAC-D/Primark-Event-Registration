@@ -2,10 +2,7 @@
 
 Registration and administration software for the Primark Carton Nomination Program. The current application collects attendee details, enforces supplier/factory seat limits, stores optional photos, provides an admin dashboard, and exports registration data to Excel.
 
-This document covers two distinct states:
-
-- **Current system** — functionality implemented in this repository.
-- **Check-in system** — event/credential/attendance data and exact-size PDF identity cards are implemented; scanner and offline interfaces remain planned.
+The repository includes registration, card generation, online mobile scanning, attendance reporting, and test/demo tooling. Offline scanning remains a future enhancement.
 
 ## Current status
 
@@ -24,13 +21,15 @@ This document covers two distinct states:
 - Event/day records, event-scoped registration snapshots, revocable QR credential history, and per-day attendance constraints.
 - Guarded realistic demo-data generation for card and scanner development.
 - Protected 85.6 mm × 54 mm PDF identity-card batches with attendee photo, QR, fallback code, and supplied footer logos.
+- Mobile-first admin scanner with camera/image scanning and manual fallback-code entry.
+- Immediate identity/photo verification, duplicate detection, and per-day attendance recording.
+- Attendance dashboard, live refresh, and day-specific Excel export.
 
 ### Not implemented
 
-- Browser-based check-in interface and attendance reporting.
-- Scanner-specific permissions.
 - Offline roster, scanning, or synchronization.
 - Installable Progressive Web App.
+- Individual administrator/scanner accounts; the requested simple setup uses one shared admin login.
 
 ## Architecture
 
@@ -39,7 +38,7 @@ The application is an API-driven modular monolith. This remains the recommended 
 ```text
 Public registration page ─┐
 Admin dashboard ──────────┼──► Node.js 24 / Express 5 ───► Supabase PostgreSQL
-Future scanner PWA ───────┘                └─────────────► Supabase Storage
+Mobile scanner ───────────┘                └─────────────► Supabase Storage
 ```
 
 Express is the only Supabase client. The browser never receives the secret key. PostgreSQL functions handle multi-step registration and admin changes transactionally.
@@ -51,10 +50,12 @@ Express is the only Supabase client. The browser never receives the secret key. 
 | Database/storage | Supabase PostgreSQL and private Storage |
 | Database client | `@supabase/supabase-js` |
 | Export | ExcelJS |
+| Card PDF / QR | PDFKit, QRCode |
+| Camera scanner | html5-qrcode (served locally) |
 | Tests | Node test runner, Supertest |
 | Optional email | Power Automate webhook |
 
-There is no frontend build step. Current pages load some libraries/fonts from CDNs; the future offline scanner must bundle every runtime asset locally.
+There is no frontend build step. The scanner library is served from the installed npm package; some dashboard libraries/fonts still load from CDNs.
 
 ## Repository structure
 
@@ -62,6 +63,7 @@ There is no frontend build step. Current pages load some libraries/fonts from CD
 public/
   index.html                 Public registration
   admin.html                 Admin dashboard
+  scanner.html               Mobile attendance scanner
   maintenance.html           Maintenance page
   styles.css                 Shared styles
   brand/                     Logos and icons
@@ -74,9 +76,10 @@ src/
   auth.js                    Admin cookie signing/verification
   errors.js                  Stable API error mapping
   routes/                    Public, photo, and admin endpoints
-  services/                  Dashboard, export, import, notification, photos
-  supabase/migrations/         Ordered migrations 001–008
+  services/                  Dashboard, cards, attendance, export, import, notification, photos
+supabase/migrations/         Ordered migrations 001–010
 scripts/
+  apply-migration.js         Apply named SQL migrations through DATABASE_URL
   import-orgs.js             Organisation import entry point
   data/*.psv                 Canonical supplier/factory data
 tests/
@@ -179,6 +182,11 @@ For full organisations, the public catalogue exposes only registrant name/design
 | `GET` | `/api/admin/export` | Excel export |
 | `GET` | `/api/admin/card-events` | Events available for card generation |
 | `POST` | `/api/admin/events/:id/cards.pdf` | Atomically issue credentials and download the card PDF |
+| `GET` | `/api/admin/events/:id/card-registrations` | Search/select confirmed attendees for printing |
+| `GET` | `/api/admin/attendance-days` | Event/day choices for scanner and dashboard |
+| `POST` | `/api/admin/attendance/check-in` | Verify QR/fallback and record attendance |
+| `GET` | `/api/admin/attendance?event_day_id=…` | Day roster and attendance summary |
+| `GET` | `/api/admin/attendance/export?event_day_id=…` | Day-specific Excel export |
 | `GET` | `/api/admin/participants/:id/photo` | Private photo |
 | `PUT` | `/api/admin/participants/:id` | Update participant |
 | `DELETE` | `/api/admin/participants/:id` | Delete participant |
@@ -195,6 +203,7 @@ Copy `.env.example` to `.env`.
 |---|---:|---|
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_SECRET_KEY` | Yes | Server-only secret key |
+| `DATABASE_URL` | For migrations | Supabase direct/session-pooler PostgreSQL URL |
 | `ADMIN_PASSWORD` | Yes | Shared admin password |
 | `SESSION_SECRET` | Yes | At least 32 characters; signs cookies |
 | `EVENT_TITLE` | Yes | Interface event subtitle |
@@ -202,6 +211,8 @@ Copy `.env.example` to `.env`.
 | `POWER_AUTOMATE_WEBHOOK_URL` | No | Confirmation webhook |
 | `PORT` | No | HTTP port; default 3000 |
 | `NODE_ENV` | No | Set to `production` behind HTTPS |
+| `HTTPS_KEY_PATH` | No | Local trusted HTTPS private-key path; set with certificate |
+| `HTTPS_CERT_PATH` | No | Local trusted HTTPS certificate path; set with key |
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
@@ -213,7 +224,7 @@ Never commit `.env`, secret keys, webhook URLs, database exports, or attendee da
 
 ## Local development
 
-Requirements: Node.js 24, a development Supabase project, and migrations `001–008`.
+Requirements: Node.js 24, a development Supabase project, and migrations `001–010`.
 
 ```bash
 npm install
@@ -224,9 +235,10 @@ npm run dev
 
 - Registration: `http://localhost:3000/`
 - Admin: `http://localhost:3000/admin`
+- Scanner: `http://localhost:3000/scanner`
 - Maintenance: `http://localhost:3000/maintenance`
 
-After admin login, choose **Generate ID cards PDF**, select an event, and generate the batch. One exact-size landscape card is written per PDF page. Generating a new batch rotates the selected registrations' credentials, so previously printed cards become revoked.
+After admin login, choose **Generate ID cards PDF**. Search and select specific attendees or choose **Print all**. One exact-size landscape card is written per PDF page. Once a printable QR has been issued it is encrypted server-side and reused on every reprint; printing new registrations does not change existing cards. Hash-only credentials created before migration `010` must be replaced once because their random QR values cannot be recovered from a hash.
 
 ```bash
 npm run dev
@@ -235,8 +247,28 @@ npm run test:unit
 npm test
 npm run import-orgs
 npm run seed:demo
+npm run db:apply -- 009_attendance_scanner_details.sql
+npm run smoke:attendance
+npm run smoke:cards
 npm run backup
 ```
+
+### Android testing
+
+For basic page/manual-code testing on the same Wi-Fi, run the server and open `http://YOUR-PC-LAN-IP:3000/scanner.html` on Android. Allow inbound TCP port 3000 in Windows Firewall if prompted. Find the PC address with `ipconfig` (usually an `IPv4 Address` such as `192.168.1.20`).
+
+Phone camera access requires a secure context. `localhost` is trusted only on the machine running the browser; a phone opening a PC's plain `http://192.168…` address is not. For real camera testing, deploy behind HTTPS or use a trusted local HTTPS certificate. The image-file and manual-code fallbacks remain available when live camera access is unavailable.
+
+The standalone server supports local HTTPS. Create a certificate containing the PC's LAN address, trust its issuing CA on the Android device, and set both paths before starting:
+
+```env
+HTTPS_KEY_PATH=certs/local-key.pem
+HTTPS_CERT_PATH=certs/local-cert.pem
+```
+
+It will then report `Listening on https://localhost:3000`; open `https://YOUR-PC-LAN-IP:3000/scanner.html`. A self-signed certificate that Android does not trust is not sufficient for dependable camera permission. For event use, a normal HTTPS deployment is simpler and safer.
+
+Pushing to GitHub stores the source but does not run this Node/Express application. GitHub Pages is unsuitable because it cannot run the server or safely hold `SUPABASE_SECRET_KEY`. Connect the repository to a Node host such as Render, Railway, or Fly.io (or another HTTPS Node host), set the environment variables there, use `npm ci` as the build command and `npm start` as the start command. The resulting HTTPS `/scanner.html` URL works on Android.
 
 ## Recovery backups
 
@@ -368,7 +400,7 @@ Current limitations:
 
 The scanner must use a separate role/device session that cannot edit/delete registrations or export private data.
 
-## Planned identity-card and attendance system
+## Identity-card and attendance design
 
 ### Objective
 
@@ -474,14 +506,16 @@ The protected admin dashboard generates a server-side PDF batch:
 - Primark PNG in the lower-left and Allport/PAC-D PNG in the lower-right.
 - Email and phone are neither printed nor encoded.
 - QR images are generated locally; credentials are never sent to an external QR service.
-- The complete PDF is rendered before one transactional database call rotates every credential in the batch.
-- Only confirmed registrations are printed. A regenerated batch revokes its previous cards.
+- Search/select printing and **Print all** are both supported.
+- A transactional database call creates credentials only when an attendee has no reusable printable credential.
+- Reprints use the same encrypted server-side QR/fallback values; unselected and previously printed cards are unchanged.
+- Only confirmed registrations are printable. Revocation is reserved for an explicit future lost-card workflow.
 
 Current-schema assumptions are isolated in `src/services/cards.js` (`mapCardRows`). When the final database arrives, field distribution can be adapted there without changing the PDF renderer or credential flow.
 
 ## Online check-in flow
 
-1. Staff signs in with scanner-only permission.
+1. Staff signs in with the shared admin login (the deliberately simple current requirement).
 2. Select event/day.
 3. Scan QR and submit credential, day, device ID, client `scan_id`, and device time.
 4. Express hashes credential and calls one transactional database function.
@@ -544,7 +578,7 @@ The sync API accepts bounded batches and is idempotent by `scan_id`. Each item b
 
 For strict outage-time duplicate prevention, use one scanner or a local-LAN server on a laptop/Raspberry Pi. Multiple independent offline scanners provide resilience, not global real-time coordination.
 
-## Planned API
+## Future offline API
 
 Scanner users may download permitted rosters, verify/check in, sync, and perform limited search. They must not edit/delete registrations or export data.
 
@@ -590,12 +624,12 @@ Complete this before production schema changes.
 - Add transactional credential rotation/check-in functions, stable outcomes, and indexes.
 - Add guarded repeatable demo data covering active, checked-in, revoked, and cancelled registrations.
 
-### Phase 2 — Cards and online scanning (in progress)
+### Phase 2 — Cards and online scanning (implemented)
 
 - Implemented: bundled QR generation and exact-size server PDF output.
-- Implemented: protected admin card UI and atomic credential rotate/revoke batches.
-- Scanner-only authentication.
-- Camera scanner plus manual fallback.
+- Implemented: protected searchable/selectable card UI and concurrency-safe permanent QR reuse.
+- Shared-admin authentication for the scanner.
+- Camera/image scanner plus manual fallback.
 - Online transaction and daily attendance dashboard/export.
 
 ### Phase 3 — Offline scanner
@@ -629,7 +663,7 @@ Future options only when required: local LAN hub, native scanner, print-vendor P
 - Same person can attend separate days once each.
 - Invalid/revoked/cancelled/wrong-event codes fail.
 - Concurrent scans cannot duplicate attendance.
-- Scanner role cannot use admin mutations/exports.
+- Scanner requires a valid admin session; individual restricted roles are intentionally not part of the current simple setup.
 
 ### Offline
 

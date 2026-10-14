@@ -33,6 +33,10 @@ export function createApp({ db, config, loginDelayMs = 1000 }) {
 
   // Served before express.static so "/" always maps to the registration page on any host.
   app.get('/', (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
+  app.get('/vendor/html5-qrcode.min.js', (_req, res) => {
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    res.sendFile(path.join(__dirname, '..', 'node_modules', 'html5-qrcode', 'html5-qrcode.min.js'));
+  });
 
   app.use('/api/admin', adminRoutes({ db, config, loginDelayMs }));
   app.use('/api', publicRoutes({ db, config }));

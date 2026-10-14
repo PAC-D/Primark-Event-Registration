@@ -9,6 +9,11 @@ export function loadConfig(env = process.env) {
   if (env.SESSION_SECRET.length < 32) {
     throw new Error('SESSION_SECRET must be at least 32 characters');
   }
+  const httpsKeyPath = (env.HTTPS_KEY_PATH ?? '').trim();
+  const httpsCertPath = (env.HTTPS_CERT_PATH ?? '').trim();
+  if (Boolean(httpsKeyPath) !== Boolean(httpsCertPath)) {
+    throw new Error('HTTPS_KEY_PATH and HTTPS_CERT_PATH must be set together');
+  }
   return {
     supabaseUrl: env.SUPABASE_URL.trim(),
     supabaseSecretKey: env.SUPABASE_SECRET_KEY.trim(),
@@ -19,5 +24,7 @@ export function loadConfig(env = process.env) {
     powerAutomateWebhookUrl: (env.POWER_AUTOMATE_WEBHOOK_URL ?? '').trim(),
     isProduction: env.NODE_ENV === 'production' || Boolean(env.VERCEL),
     maintenanceMode: TRUE_FLAGS.has((env.MAINTENANCE_MODE ?? '').trim().toLowerCase()),
+    httpsKeyPath,
+    httpsCertPath,
   };
 }

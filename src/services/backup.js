@@ -52,7 +52,7 @@ export const BACKUP_TABLES = [
   },
   {
     name: 'registration_credentials',
-    columns: ['id', 'registration_id', 'token_hash', 'fallback_code_hash', 'status', 'issued_at', 'revoked_at'],
+    columns: ['id', 'registration_id', 'token_hash', 'fallback_code_hash', 'status', 'issued_at', 'revoked_at', 'print_payload'],
     order: ['registration_id', 'issued_at'],
   },
   {

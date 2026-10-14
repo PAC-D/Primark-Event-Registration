@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#002b61">
+  <title>Attendance Scanner – Primark Carton Nomination Program</title>
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/vendor/html5-qrcode.min.js" defer></script>
+  <script type="module" src="/js/scanner.js"></script>
+</head>
+<body class="scanner-body">
+  <header class="scanner-header">
+    <span class="logo-chip"><img class="brand-logo pacd" src="/brand/pacd.png" alt="PAC-D"></span>
+    <div><h1>Attendance scanner</h1><p id="network-state">Checking connection…</p></div>
+    <img class="brand-logo primark" src="/brand/primark.png" alt="Primark">
+  </header>
+
+  <main class="scanner-page">
+    <section id="scanner-login" class="card scanner-login" hidden>
+      <h2>Admin login</h2>
+      <p class="muted">Use the same admin password as the dashboard.</p>
+      <form id="scanner-login-form">
+        <div class="field"><label for="scanner-password">Password</label><input id="scanner-password" type="password" autocomplete="current-password" required></div>
+        <p class="alert" id="scanner-login-error" role="alert" hidden></p>
+        <button class="btn primary scanner-main-button" type="submit">Log in</button>
+      </form>
+    </section>
+
+    <section id="scanner-app" hidden>
+      <div class="scanner-controls card">
+        <div class="field scanner-day-field">
+          <label for="event-day">Event day</label>
+          <select id="event-day"></select>
+        </div>
+        <div class="scanner-nav">
+          <a class="btn" href="/admin.html">Dashboard</a>
+          <button class="btn" id="scanner-logout" type="button">Logout</button>
+        </div>
+      </div>
+
+      <p class="alert" id="scanner-error" role="alert" hidden></p>
+      <section id="scan-panel" class="card scanner-card">
+        <h2>Scan attendee card</h2>
+        <p class="muted scanner-hint">Point the rear camera at the QR code, or select an image containing it.</p>
+        <div id="qr-reader" class="qr-reader"></div>
+        <details class="manual-scan">
+          <summary>Enter fallback code manually</summary>
+          <form id="manual-form">
+            <div class="field"><label for="manual-code">Code printed below QR</label><input id="manual-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-EFGH-JKLM"></div>
+            <button class="btn primary scanner-main-button" type="submit">Verify and check in</button>
+          </form>
+        </details>
+      </section>
+
+      <section id="scan-result" class="card scanner-result" aria-live="polite" hidden></section>
+    </section>
+  </main>
+</body>
+</html>
