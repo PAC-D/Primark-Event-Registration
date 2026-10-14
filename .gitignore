@@ -9,3 +9,5 @@ node_modules/
 docs/
 backups/
 db-*.sql
+supabase/.temp/
+.demo/

@@ -5,7 +5,7 @@ Registration and administration software for the Primark Carton Nomination Progr
 This document covers two distinct states:
 
 - **Current system** — functionality implemented in this repository.
-- **Planned check-in system** — identity cards, QR verification, daily attendance, and offline operation. This functionality is not implemented yet.
+- **Check-in system** — the event/credential/attendance data foundation is implemented; card, scanner, and offline interfaces remain planned.
 
 ## Current status
 
@@ -21,12 +21,13 @@ This document covers two distinct states:
 - Canonical supplier/factory import.
 - Maintenance mode and abandoned-photo cleanup.
 - Unit, API, and database tests.
+- Event/day records, event-scoped registration snapshots, revocable QR credential history, and per-day attendance constraints.
+- Guarded realistic demo-data generation for card and scanner development.
 
 ### Not implemented
 
-- Event/event-day database records.
-- Printable identity cards or QR credentials.
-- Check-in and per-day attendance.
+- Printable identity cards and browser presentation of issued QR credentials.
+- Browser-based check-in interface and attendance reporting.
 - Scanner-specific permissions.
 - Offline roster, scanning, or synchronization.
 - Installable Progressive Web App.
@@ -74,7 +75,7 @@ src/
   errors.js                  Stable API error mapping
   routes/                    Public, photo, and admin endpoints
   services/                  Dashboard, export, import, notification, photos
-supabase/migrations/         Ordered migrations 001–005
+  supabase/migrations/         Ordered migrations 001–006
 scripts/
   import-orgs.js             Organisation import entry point
   data/*.psv                 Canonical supplier/factory data
@@ -210,7 +211,7 @@ Never commit `.env`, secret keys, webhook URLs, database exports, or attendee da
 
 ## Local development
 
-Requirements: Node.js 24, a development Supabase project, and migrations `001–005`.
+Requirements: Node.js 24, a development Supabase project, and migrations `001–006`.
 
 ```bash
 npm install
@@ -229,6 +230,7 @@ npm start
 npm run test:unit
 npm test
 npm run import-orgs
+npm run seed:demo
 npm run backup
 ```
 
@@ -284,6 +286,16 @@ node --env-file=.env.production scripts/import-orgs.js "path/to/data"
 ```
 
 The import inserts new list organisations, refreshes codes, preserves attendee-created pending rows, and removes stale list organisations only when no attendee links to them.
+
+## Demo event data
+
+After migrations and organisation import, a disposable development project can be populated with realistic attendees, event days, credential states, and attendance examples:
+
+```bash
+ALLOW_DUMMY_SEED=yes npm run seed:demo
+```
+
+The explicit flag prevents accidental execution. The command is repeatable and writes the raw dummy QR/fallback values to `.demo/credentials.json`, which is ignored by Git. The database stores only their SHA-256 hashes.
 
 ## Deployment
 
@@ -565,12 +577,12 @@ Example request:
 
 Complete this before production schema changes.
 
-### Phase 1 — Event-ready data
+### Phase 1 — Event-ready data (implemented)
 
-- Migration `006`: events, days, registrations, credentials, attendance.
-- Backfill current event/attendees with count checks.
-- Centralize event metadata.
-- Add transactional credential/check-in functions and indexes.
+- Migration `006`: events, days, registrations, organisation snapshots, credential history, and attendance.
+- Backfill existing attendees when upgrading a populated database.
+- Add transactional credential rotation/check-in functions, stable outcomes, and indexes.
+- Add guarded repeatable demo data covering active, checked-in, revoked, and cancelled registrations.
 
 ### Phase 2 — Cards and online scanning (minimum useful release)
 

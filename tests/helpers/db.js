@@ -27,6 +27,7 @@ export async function check(request) {
 export async function wipe(db) {
   await check(db.from('attendee_orgs').delete().not('attendee_id', 'is', null));
   await check(db.from('attendees').delete().not('id', 'is', null));
+  await check(db.from('events').delete().not('id', 'is', null));
   await check(db.from('organisations').delete().gt('id', 0));
 }
 

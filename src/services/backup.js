@@ -30,6 +30,36 @@ export const BACKUP_TABLES = [
     columns: ['attendee_id', 'org_id', 'code'],
     order: ['attendee_id', 'org_id'],
   },
+  {
+    name: 'events',
+    columns: ['id', 'code', 'name', 'subtitle', 'timezone', 'starts_at', 'ends_at', 'status', 'created_at', 'updated_at'],
+    order: ['id'],
+  },
+  {
+    name: 'event_days',
+    columns: ['id', 'event_id', 'event_date', 'label', 'check_in_opens_at', 'check_in_closes_at', 'created_at'],
+    order: ['event_id', 'event_date'],
+  },
+  {
+    name: 'event_registrations',
+    columns: ['id', 'event_id', 'attendee_id', 'status', 'created_at', 'updated_at'],
+    order: ['event_id', 'id'],
+  },
+  {
+    name: 'registration_orgs',
+    columns: ['registration_id', 'org_id', 'kind', 'name', 'code'],
+    order: ['registration_id', 'kind', 'name'],
+  },
+  {
+    name: 'registration_credentials',
+    columns: ['id', 'registration_id', 'token_hash', 'fallback_code_hash', 'status', 'issued_at', 'revoked_at'],
+    order: ['registration_id', 'issued_at'],
+  },
+  {
+    name: 'attendance',
+    columns: ['id', 'registration_id', 'event_day_id', 'first_scanned_at', 'scanned_at_device', 'received_at', 'device_id', 'scan_id', 'source'],
+    order: ['event_day_id', 'first_scanned_at'],
+  },
 ];
 
 const PAGE_SIZE = 1_000;
