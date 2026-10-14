@@ -17,6 +17,7 @@ export const errors = {
   validation: (fields) => new AppError('VALIDATION', 400, 'Please check the highlighted fields.', { fields }),
   unauthorised: (message = 'Please log in again.') => new AppError('UNAUTHORISED', 401, message),
   notFound: () => new AppError('NOT_FOUND', 404, RECORD_GONE),
+  conflict: (message) => new AppError('CONFLICT', 409, message),
   dbUnavailable: () => new AppError('DB_UNAVAILABLE', 503, 'Service is busy, please try again in a moment.'),
   maintenance: () => new AppError('MAINTENANCE', 503, 'The site is down for scheduled maintenance. Please try again shortly.'),
   internal: (cause) => Object.assign(new AppError('INTERNAL', 500, 'Something went wrong, please try again.'), { cause }),

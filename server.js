@@ -13,9 +13,29 @@ const app = createApp({ db, config });
 if (!process.env.VERCEL) {
   app.use(express.static('public', { extensions: ['html'] }));
   const port = Number(process.env.PORT) || 3000;
-  app.listen(port, () => console.log(`Listening on http://localhost:${port}`));
+  // Keep an explicit reference to the listener. The cleanup timers below are deliberately
+  // unref'd, so the HTTP server must be the process's authoritative long-lived handle.
+  const server = app.listen(port, () => console.log(`Listening on http://localhost:${port}`));
+  server.ref();
+  server.on('error', (error) => {
+    console.error(`Server failed: ${error.message}`);
+    process.exitCode = 1;
+  });
   // Background cleanup: photos uploaded but never submitted are removed after 2 hours.
-  startPhotoSweeper(db);
+  const stopPhotoSweeper = startPhotoSweeper(db);
+
+  const shutdown = (signal) => {
+    console.log(`\n${signal} received; closing server.`);
+    stopPhotoSweeper();
+    server.close((error) => {
+      if (error) {
+        console.error(`Server shutdown failed: ${error.message}`);
+        process.exitCode = 1;
+      }
+    });
+  };
+  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 export default app;

@@ -356,6 +356,63 @@ async function exportExcel() {
   URL.revokeObjectURL(url);
 }
 
+async function downloadCards(eventId, button) {
+  button.disabled = true;
+  button.textContent = 'Generating PDF…';
+  try {
+    const res = await fetch(`/api/admin/events/${eventId}/cards.pdf`, {
+      method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/pdf' },
+    });
+    if (res.status === 401) throw Object.assign(new Error('Please log in again.'), { status: 401 });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || 'Card generation failed, please try again.');
+    }
+    const blob = await res.blob();
+    const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'identity-cards.pdf';
+    const url = URL.createObjectURL(blob);
+    const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    closeModal();
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Generate and download PDF';
+  }
+}
+
+async function openCards() {
+  const { events } = await api('/api/admin/card-events');
+  if (!events.length) throw new Error('Create an event before generating identity cards.');
+  openModal(`
+    <div class="modal-head"><h2>Generate identity cards</h2><button type="button" class="btn small" data-close>Close</button></div>
+    <div class="field">
+      <label for="card-event">Event</label>
+      <select id="card-event">
+        ${events.map((event) => `<option value="${escapeHtml(event.id)}">${escapeHtml(event.name)} — ${event.confirmed_registrations} confirmed</option>`).join('')}
+      </select>
+    </div>
+    <p class="alert"><strong>Important:</strong> generating a new batch revokes previously generated QR cards for the selected registrations.</p>
+    <p class="muted">The PDF uses one exact 8.56 cm × 5.4 cm landscape card per page.</p>
+    <p class="alert" id="modal-error" role="alert" hidden></p>
+    <div class="modal-actions">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="button" class="btn primary" id="generate-cards">Generate and download PDF</button>
+    </div>`);
+  $('#generate-cards').addEventListener('click', async () => {
+    const button = $('#generate-cards');
+    const eventId = $('#card-event').value;
+    try {
+      await downloadCards(eventId, button);
+    } catch (err) {
+      if (err.status === 401) showLogin();
+      else showModalError(escapeHtml(err.message));
+    }
+  });
+}
+
 // ---------- events ----------
 
 document.addEventListener('click', (event) => {
@@ -402,6 +459,7 @@ $('#login-form').addEventListener('submit', async (event) => {
 });
 
 $('#refresh').addEventListener('click', refresh);
+$('#cards').addEventListener('click', () => guarded(openCards));
 $('#export').addEventListener('click', () => guarded(exportExcel));
 $('#logout').addEventListener('click', async () => {
   await api('/api/admin/logout', { method: 'POST' }).catch(() => {});

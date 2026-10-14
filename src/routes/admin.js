@@ -8,6 +8,7 @@ import { errors } from '../errors.js';
 import { loadDashboard } from '../services/dashboard.js';
 import { buildWorkbook, exportFilename } from '../services/export.js';
 import { PHOTO_BUCKET, photoContentType } from '../services/photo.js';
+import { cardPdfFilename, generateCardBatch, listCardEvents } from '../services/cards.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -70,6 +71,25 @@ export function adminRoutes({ db, config, loginDelayMs }) {
       'Cache-Control': 'no-store',
     });
     res.send(Buffer.from(buffer));
+  });
+
+  router.get('/card-events', async (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ events: await listCardEvents(db) });
+  });
+
+  router.post('/events/:id/cards.pdf', async (req, res) => {
+    const eventId = participantId(req.params.id);
+    const batch = await generateCardBatch(db, eventId);
+    if (!batch) throw errors.notFound();
+    if (batch.empty) throw errors.conflict('This event has no confirmed registrations to print.');
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${cardPdfFilename(batch.event)}"`,
+      'Content-Length': String(batch.pdf.length),
+      'Cache-Control': 'no-store',
+    });
+    res.send(batch.pdf);
   });
 
   router.get('/participants/:id/photo', async (req, res) => {

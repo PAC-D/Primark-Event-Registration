@@ -5,7 +5,7 @@ Registration and administration software for the Primark Carton Nomination Progr
 This document covers two distinct states:
 
 - **Current system** — functionality implemented in this repository.
-- **Check-in system** — the event/credential/attendance data foundation is implemented; card, scanner, and offline interfaces remain planned.
+- **Check-in system** — event/credential/attendance data and exact-size PDF identity cards are implemented; scanner and offline interfaces remain planned.
 
 ## Current status
 
@@ -23,10 +23,10 @@ This document covers two distinct states:
 - Unit, API, and database tests.
 - Event/day records, event-scoped registration snapshots, revocable QR credential history, and per-day attendance constraints.
 - Guarded realistic demo-data generation for card and scanner development.
+- Protected 85.6 mm × 54 mm PDF identity-card batches with attendee photo, QR, fallback code, and supplied footer logos.
 
 ### Not implemented
 
-- Printable identity cards and browser presentation of issued QR credentials.
 - Browser-based check-in interface and attendance reporting.
 - Scanner-specific permissions.
 - Offline roster, scanning, or synchronization.
@@ -75,7 +75,7 @@ src/
   errors.js                  Stable API error mapping
   routes/                    Public, photo, and admin endpoints
   services/                  Dashboard, export, import, notification, photos
-  supabase/migrations/         Ordered migrations 001–006
+  supabase/migrations/         Ordered migrations 001–008
 scripts/
   import-orgs.js             Organisation import entry point
   data/*.psv                 Canonical supplier/factory data
@@ -155,7 +155,7 @@ Security-invoker view calculating seat use and link count.
 
 RLS is enabled. `anon` and `authenticated` have no application-table access; only `service_role` receives table/RPC permissions.
 
-Apply migrations numerically. Never edit an applied migration. Every database change must use a new migration, beginning with `006_...sql`.
+Apply migrations numerically. Never edit an applied migration. Every database change must use the next numbered migration.
 
 ## Current HTTP API
 
@@ -177,6 +177,8 @@ For full organisations, the public catalogue exposes only registrant name/design
 | `POST` | `/api/admin/logout` | Clear session |
 | `GET` | `/api/admin/data` | Dashboard data |
 | `GET` | `/api/admin/export` | Excel export |
+| `GET` | `/api/admin/card-events` | Events available for card generation |
+| `POST` | `/api/admin/events/:id/cards.pdf` | Atomically issue credentials and download the card PDF |
 | `GET` | `/api/admin/participants/:id/photo` | Private photo |
 | `PUT` | `/api/admin/participants/:id` | Update participant |
 | `DELETE` | `/api/admin/participants/:id` | Delete participant |
@@ -211,7 +213,7 @@ Never commit `.env`, secret keys, webhook URLs, database exports, or attendee da
 
 ## Local development
 
-Requirements: Node.js 24, a development Supabase project, and migrations `001–006`.
+Requirements: Node.js 24, a development Supabase project, and migrations `001–008`.
 
 ```bash
 npm install
@@ -223,6 +225,8 @@ npm run dev
 - Registration: `http://localhost:3000/`
 - Admin: `http://localhost:3000/admin`
 - Maintenance: `http://localhost:3000/maintenance`
+
+After admin login, choose **Generate ID cards PDF**, select an event, and generate the batch. One exact-size landscape card is written per PDF page. Generating a new batch rotates the selected registrations' credentials, so previously printed cards become revoked.
 
 ```bash
 npm run dev
@@ -293,6 +297,13 @@ After migrations and organisation import, a disposable development project can b
 
 ```bash
 ALLOW_DUMMY_SEED=yes npm run seed:demo
+```
+
+PowerShell:
+
+```powershell
+$env:ALLOW_DUMMY_SEED='yes'
+npm run seed:demo
 ```
 
 The explicit flag prevents accidental execution. The command is repeatable and writes the raw dummy QR/fallback values to `.demo/credentials.json`, which is ignored by Git. The database stores only their SHA-256 hashes.
@@ -456,22 +467,17 @@ A printed QR can be copied. Online duplicate detection helps but does not prove 
 
 ## Identity-card generation
 
-Start with protected printable HTML rather than server PDF generation.
+The protected admin dashboard generates a server-side PDF batch:
 
-- Recommended size: `85.6mm × 54mm`.
-- Support single-card and A4-grid print CSS.
-- Include event, photo, name, designation, organisation, QR, fallback code.
-- Exclude email/phone by default.
-- Generate QR SVG locally with a bundled library; never send credentials to a public QR website.
-- Browser print-to-PDF is sufficient initially. Add dedicated PDF generation only for a print-vendor requirement.
+- Exact page size: `85.6mm × 54mm`, landscape, one card per page.
+- Event header, attendee photo/placeholder, name, company/factory, QR, and fallback code.
+- Primark PNG in the lower-left and Allport/PAC-D PNG in the lower-right.
+- Email and phone are neither printed nor encoded.
+- QR images are generated locally; credentials are never sent to an external QR service.
+- The complete PDF is rendered before one transactional database call rotates every credential in the batch.
+- Only confirmed registrations are printed. A regenerated batch revokes its previous cards.
 
-Suggested routes:
-
-```text
-GET  /admin/cards?event_id=...
-GET  /api/admin/cards-data?event_id=...
-POST /api/admin/registrations/:id/credential/rotate
-```
+Current-schema assumptions are isolated in `src/services/cards.js` (`mapCardRows`). When the final database arrives, field distribution can be adapted there without changing the PDF renderer or credential flow.
 
 ## Online check-in flow
 
@@ -584,10 +590,10 @@ Complete this before production schema changes.
 - Add transactional credential rotation/check-in functions, stable outcomes, and indexes.
 - Add guarded repeatable demo data covering active, checked-in, revoked, and cancelled registrations.
 
-### Phase 2 — Cards and online scanning (minimum useful release)
+### Phase 2 — Cards and online scanning (in progress)
 
-- Bundle QR library.
-- Printable card UI and credential rotate/revoke.
+- Implemented: bundled QR generation and exact-size server PDF output.
+- Implemented: protected admin card UI and atomic credential rotate/revoke batches.
 - Scanner-only authentication.
 - Camera scanner plus manual fallback.
 - Online transaction and daily attendance dashboard/export.

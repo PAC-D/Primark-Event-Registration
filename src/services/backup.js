@@ -32,7 +32,7 @@ export const BACKUP_TABLES = [
   },
   {
     name: 'events',
-    columns: ['id', 'code', 'name', 'subtitle', 'timezone', 'starts_at', 'ends_at', 'status', 'created_at', 'updated_at'],
+    columns: ['id', 'code', 'name', 'subtitle', 'timezone', 'starts_at', 'ends_at', 'status', 'created_at', 'updated_at', 'venue', 'organiser'],
     order: ['id'],
   },
   {

@@ -53,8 +53,10 @@ async function main() {
 
   const event = await check(db.from('events').upsert({
     code: 'demo-2026',
-    name: 'Primark Bangladesh Origin Event',
+    name: 'Carton Nomination Program',
     subtitle: 'Identity card and attendance demonstration',
+    venue: 'Crowne Plaza Dhaka Airport by IHG',
+    organiser: 'PAC-D Bangladesh',
     timezone: 'Asia/Dhaka',
     starts_at: '2026-11-04T09:00:00+06:00',
     ends_at: '2026-11-05T17:00:00+06:00',

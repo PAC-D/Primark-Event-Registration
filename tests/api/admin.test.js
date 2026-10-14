@@ -20,6 +20,8 @@ const protectedRoutes = [
   ['put', `/api/admin/participants/${PERSON_ID}`],
   ['delete', `/api/admin/participants/${PERSON_ID}`],
   ['get', `/api/admin/participants/${PERSON_ID}/photo`],
+  ['get', '/api/admin/card-events'],
+  ['post', `/api/admin/events/${PERSON_ID}/cards.pdf`],
   ['post', '/api/admin/organisations/1/approve'],
   ['post', '/api/admin/organisations/1/merge'],
 ];
