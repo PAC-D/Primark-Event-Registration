@@ -105,9 +105,9 @@ async function startScanner() {
 }
 
 const STATUS = {
-  INVALID: ['Invalid card', 'This QR code is not recognised.', 'bad'],
-  REVOKED: ['Card revoked', 'This card was replaced or the registration was cancelled.', 'bad'],
-  WRONG_EVENT: ['Wrong event', 'This card does not belong to the selected event day.', 'bad'],
+  INVALID: ['Invalid QR code', 'This QR code is not recognised.', 'bad'],
+  REVOKED: ['Credential revoked', 'This credential was replaced or the registration was cancelled.', 'bad'],
+  WRONG_EVENT: ['Wrong event', 'This credential does not belong to the selected event day.', 'bad'],
   OUTSIDE_CHECKIN_WINDOW: ['Check-in closed', 'The event or its check-in window is not open.', 'warn'],
 };
 
@@ -115,7 +115,7 @@ function renderResult(result) {
   const accepted = result.status === 'CHECKED_IN' || result.status === 'ALREADY_CHECKED_IN';
   const [title, detail, kind] = accepted
     ? [result.status === 'CHECKED_IN' ? 'Attendance taken' : 'Already checked in', result.status === 'CHECKED_IN' ? 'Verified and saved successfully.' : 'No duplicate was created.', result.status === 'CHECKED_IN' ? 'good' : 'warn']
-    : (STATUS[result.status] ?? ['Scan rejected', 'The server could not verify this card.', 'bad']);
+    : (STATUS[result.status] ?? ['Scan rejected', 'The server could not verify this credential.', 'bad']);
   const photo = accepted && result.has_photo
     ? `<img class="scanner-photo" src="/api/admin/participants/${escapeHtml(result.attendee_id)}/photo" alt="Attendee photo">`
     : accepted ? '<div class="scanner-photo placeholder" aria-hidden="true">✓</div>' : '';
@@ -132,6 +132,19 @@ function renderResult(result) {
   if (navigator.vibrate) navigator.vibrate(kind === 'good' ? 120 : [100, 80, 100]);
 }
 
+function credentialFromScan(value) {
+  const raw = String(value).trim();
+  try {
+    const url = new URL(raw);
+    if (url.pathname.endsWith('/verify.html') && url.hash.length > 1) {
+      return decodeURIComponent(url.hash.slice(1)).trim();
+    }
+  } catch {
+    // Raw QR credentials and manual fallback codes are not URLs.
+  }
+  return raw;
+}
+
 async function submitScan(credential) {
   if (busy) return;
   if (!navigator.onLine) { showError('You are offline. Reconnect before scanning.'); return; }
@@ -144,7 +157,7 @@ async function submitScan(credential) {
     const result = await api('/api/admin/attendance/check-in', {
       method: 'POST',
       body: {
-        credential: String(credential).trim(), event_day_id: day.id,
+        credential: credentialFromScan(credential), event_day_id: day.id,
         scan_id: randomId(), device_id: deviceId(), scanned_at_device: new Date().toISOString(),
       },
     });

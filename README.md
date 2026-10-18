@@ -2,7 +2,7 @@
 
 Registration and administration software for the Primark Carton Nomination Program. The current application collects attendee details, enforces supplier/factory seat limits, stores optional photos, provides an admin dashboard, and exports registration data to Excel.
 
-The repository includes registration, card generation, online mobile scanning, attendance reporting, and test/demo tooling. Offline scanning remains a future enhancement.
+The repository includes registration, online mobile scanning, attendance reporting, and test/demo tooling. Offline scanning remains a future enhancement.
 
 ## Current status
 
@@ -19,8 +19,7 @@ The repository includes registration, card generation, online mobile scanning, a
 - Maintenance mode and abandoned-photo cleanup.
 - Unit, API, and database tests.
 - Event/day records, event-scoped registration snapshots, revocable QR credential history, and per-day attendance constraints.
-- Guarded realistic demo-data generation for card and scanner development.
-- Protected 85.6 mm × 54 mm PDF identity-card batches with attendee photo, QR, fallback code, and supplied footer logos.
+- Guarded realistic demo-data generation for scanner development.
 - Mobile-first admin scanner with camera/image scanning and manual fallback-code entry.
 - Immediate identity/photo verification, duplicate detection, and per-day attendance recording.
 - Attendance dashboard, live refresh, and day-specific Excel export.
@@ -50,7 +49,6 @@ Express is the only Supabase client. The browser never receives the secret key. 
 | Database/storage | Supabase PostgreSQL and private Storage |
 | Database client | `@supabase/supabase-js` |
 | Export | ExcelJS |
-| Card PDF / QR | PDFKit, QRCode |
 | Camera scanner | html5-qrcode (served locally) |
 | Tests | Node test runner, Supertest |
 | Optional email | Power Automate webhook |
@@ -76,8 +74,8 @@ src/
   auth.js                    Admin cookie signing/verification
   errors.js                  Stable API error mapping
   routes/                    Public, photo, and admin endpoints
-  services/                  Dashboard, cards, attendance, export, import, notification, photos
-supabase/migrations/         Ordered migrations 001–010
+  services/                  Dashboard, attendance, export, import, notification, photos
+supabase/migrations/         Ordered migrations 001–011
 scripts/
   apply-migration.js         Apply named SQL migrations through DATABASE_URL
   import-orgs.js             Organisation import entry point
@@ -169,6 +167,8 @@ Apply migrations numerically. Never edit an applied migration. Every database ch
 | `GET` | `/api/organisations` | Approved catalogue and full-seat registrants |
 | `POST` | `/api/photos` | Upload validated JPEG/PNG |
 | `POST` | `/api/register` | Validate and register attendee |
+| `POST` | `/api/attendee-profile` | Verify an active QR credential and return its public attendee profile |
+| `POST` | `/api/attendee-profile/photo` | Verify the credential again and stream its private attendee photo |
 
 For full organisations, the public catalogue exposes only registrant name/designation by design.
 
@@ -180,9 +180,6 @@ For full organisations, the public catalogue exposes only registrant name/design
 | `POST` | `/api/admin/logout` | Clear session |
 | `GET` | `/api/admin/data` | Dashboard data |
 | `GET` | `/api/admin/export` | Excel export |
-| `GET` | `/api/admin/card-events` | Events available for card generation |
-| `POST` | `/api/admin/events/:id/cards.pdf` | Atomically issue credentials and download the card PDF |
-| `GET` | `/api/admin/events/:id/card-registrations` | Search/select confirmed attendees for printing |
 | `GET` | `/api/admin/attendance-days` | Event/day choices for scanner and dashboard |
 | `POST` | `/api/admin/attendance/check-in` | Verify QR/fallback and record attendance |
 | `GET` | `/api/admin/attendance?event_day_id=…` | Day roster and attendance summary |
@@ -224,7 +221,7 @@ Never commit `.env`, secret keys, webhook URLs, database exports, or attendee da
 
 ## Local development
 
-Requirements: Node.js 24, a development Supabase project, and migrations `001–010`.
+Requirements: Node.js 24, a development Supabase project, and migrations `001–011`.
 
 ```bash
 npm install
@@ -236,9 +233,10 @@ npm run dev
 - Registration: `http://localhost:3000/`
 - Admin: `http://localhost:3000/admin`
 - Scanner: `http://localhost:3000/scanner`
+- Public attendee verification: `http://localhost:3000/verify.html#ER1.example-token`
 - Maintenance: `http://localhost:3000/maintenance`
 
-After admin login, choose **Generate ID cards PDF**. Search and select specific attendees or choose **Print all**. One exact-size landscape card is written per PDF page. Once a printable QR has been issued it is encrypted server-side and reused on every reprint; printing new registrations does not change existing cards. Hash-only credentials created before migration `010` must be replaced once because their random QR values cannot be recovered from a hash.
+Public-facing QR codes should contain `https://YOUR_HOST/verify.html#<opaque-credential>`. A phone camera opens the mobile verification page without an admin login. The fragment is submitted to a read-only endpoint and is not included in the initial HTTP request or referrer. Viewing the profile never records attendance; the authenticated staff scanner understands the same URL and performs check-in separately.
 
 ```bash
 npm run dev
@@ -249,7 +247,6 @@ npm run import-orgs
 npm run seed:demo
 npm run db:apply -- 009_attendance_scanner_details.sql
 npm run smoke:attendance
-npm run smoke:cards
 npm run backup
 ```
 
@@ -400,26 +397,24 @@ Current limitations:
 
 The scanner must use a separate role/device session that cannot edit/delete registrations or export private data.
 
-## Identity-card and attendance design
+## Attendance design
 
 ### Objective
 
 For every confirmed registration:
 
-1. Generate a printable identity card.
-2. Place an opaque QR credential on it.
-3. Verify registration validity for the selected event.
-4. Record attendance once per selected event day.
-5. Identify repeat scans clearly.
-6. Continue during internet outages.
-7. Synchronize safely afterward.
+1. Verify an opaque credential for the selected event.
+2. Record attendance once per selected event day.
+3. Identify repeat scans clearly.
+4. Continue during internet outages.
+5. Synchronize safely afterward.
 
 ### Approach
 
-Keep one Express service and one Supabase project. Add typed tables and modules for events, cards, credentials, check-in, and offline synchronization. Do not create microservices or a generic key/value settings system.
+Keep one Express service and one Supabase project. Use typed tables and modules for events, credentials, check-in, and offline synchronization. Do not create microservices or a generic key/value settings system.
 
 ```text
-Admin/card UI ─────────────┐
+Admin attendance UI ───────┐
 Online scanner ────────────┼──► Express API ───► PostgreSQL/Storage
 Offline scanner PWA ───────┘        ▲
   ├─ cached application             │ sync
@@ -491,27 +486,11 @@ Requirements:
 - Encode no API/Supabase secret.
 - Store only `SHA-256(raw token)` in database/offline roster.
 - Support revoke and rotate without changing registration ID.
-- Print a short manual fallback code.
+- Support a short manual fallback code.
 
-Do not use only the attendee UUID: it is permanent and cannot be independently rotated after a lost/copied card.
+Do not use only the attendee UUID: it is permanent and cannot be independently rotated after a leaked/copied credential.
 
-A printed QR can be copied. Online duplicate detection helps but does not prove identity; cards should show name/photo for visual comparison.
-
-## Identity-card generation
-
-The protected admin dashboard generates a server-side PDF batch:
-
-- Exact page size: `85.6mm × 54mm`, landscape, one card per page.
-- Event header, attendee photo/placeholder, name, company/factory, QR, and fallback code.
-- Primark PNG in the lower-left and Allport/PAC-D PNG in the lower-right.
-- Email and phone are neither printed nor encoded.
-- QR images are generated locally; credentials are never sent to an external QR service.
-- Search/select printing and **Print all** are both supported.
-- A transactional database call creates credentials only when an attendee has no reusable printable credential.
-- Reprints use the same encrypted server-side QR/fallback values; unselected and previously printed cards are unchanged.
-- Only confirmed registrations are printable. Revocation is reserved for an explicit future lost-card workflow.
-
-Current-schema assumptions are isolated in `src/services/cards.js` (`mapCardRows`). When the final database arrives, field distribution can be adapted there without changing the PDF renderer or credential flow.
+A scanned QR can be copied. Online duplicate detection helps but does not prove identity; staff should verify the attendee details returned after a successful scan.
 
 ## Online check-in flow
 
@@ -624,10 +603,8 @@ Complete this before production schema changes.
 - Add transactional credential rotation/check-in functions, stable outcomes, and indexes.
 - Add guarded repeatable demo data covering active, checked-in, revoked, and cancelled registrations.
 
-### Phase 2 — Cards and online scanning (implemented)
+### Phase 2 — Online scanning (implemented)
 
-- Implemented: bundled QR generation and exact-size server PDF output.
-- Implemented: protected searchable/selectable card UI and concurrency-safe permanent QR reuse.
 - Shared-admin authentication for the scanner.
 - Camera/image scanner plus manual fallback.
 - Online transaction and daily attendance dashboard/export.
@@ -642,19 +619,12 @@ Complete this before production schema changes.
 ### Phase 4 — Operational hardening
 
 - Individual staff/device accounts and audit log.
-- Lost-card workflow, monitoring, load test, full rehearsal.
+- Credential-revocation workflow, monitoring, load test, full rehearsal.
 - Incident, support, backup, and retention procedures.
 
-Future options only when required: local LAN hub, native scanner, print-vendor PDF batches, multi-tenant ownership, or badge-printer integration.
+Future options only when required: local LAN hub, native scanner, multi-tenant ownership, or badge-printer integration.
 
 ## Acceptance criteria
-
-### Cards
-
-- One active credential per confirmed registration.
-- No personal contact data encoded.
-- Reissue invalidates old QR.
-- Correct physical print size and reliable scanning.
 
 ### Online
 

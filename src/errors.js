@@ -16,7 +16,7 @@ const RETRYABLE_PG_CODES = new Set(['40P01', '40001', '55P03', '57014', '23503']
 export const errors = {
   validation: (fields) => new AppError('VALIDATION', 400, 'Please check the highlighted fields.', { fields }),
   unauthorised: (message = 'Please log in again.') => new AppError('UNAUTHORISED', 401, message),
-  notFound: () => new AppError('NOT_FOUND', 404, RECORD_GONE),
+  notFound: (message = RECORD_GONE) => new AppError('NOT_FOUND', 404, message),
   conflict: (message) => new AppError('CONFLICT', 409, message),
   dbUnavailable: () => new AppError('DB_UNAVAILABLE', 503, 'Service is busy, please try again in a moment.'),
   maintenance: () => new AppError('MAINTENANCE', 503, 'The site is down for scheduled maintenance. Please try again shortly.'),
