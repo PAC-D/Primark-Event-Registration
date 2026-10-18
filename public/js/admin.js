@@ -20,6 +20,9 @@ let modalCleanup = null;
 const formatTime = (iso) => new Date(iso).toLocaleString('en-GB', {
   timeZone: EVENT_TIME_ZONE, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
 });
+const formatEventDate = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', {
+  timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric',
+});
 
 // ---------- screens ----------
 
@@ -227,10 +230,14 @@ function renderChips() {
   } else if (view.tab === 'supplier' || view.tab === 'factory') {
     chips = [['all', 'All'], ['missing', 'Missing'], ['registered', 'Registered'], ['full', 'Full']].map(([v, l]) => chip('status', v, l));
   } else if (view.tab === 'attendance' && attendanceDays?.length) {
-    chips = [`<label class="field-inline" for="attendance-day">Event day</label><select id="attendance-day">
-      ${attendanceDays.map((day) => `<option value="${escapeHtml(day.id)}" ${day.id === attendanceDayId ? 'selected' : ''}>${escapeHtml(day.event.name)} · ${escapeHtml(day.label)} · ${escapeHtml(day.event_date)}</option>`).join('')}
-    </select><button type="button" class="btn" data-attendance-export>Export attendance</button>`];
+    chips = [`<div class="attendance-controls">
+      <label class="attendance-day-field" for="attendance-day"><span>Event day</span><select id="attendance-day">
+      ${attendanceDays.map((day) => `<option value="${escapeHtml(day.id)}" ${day.id === attendanceDayId ? 'selected' : ''}>${escapeHtml(day.event.name)} · ${escapeHtml(day.label)} · ${formatEventDate(day.event_date)}</option>`).join('')}
+      </select></label>
+      <button type="button" class="btn attendance-export" data-attendance-export>Export attendance</button>
+    </div>`];
   }
+  $('#chips').classList.toggle('attendance-filters', view.tab === 'attendance');
   $('#chips').innerHTML = chips.join('');
 }
 
@@ -247,6 +254,7 @@ function renderTab({ animate = false } = {}) {
     button.setAttribute('aria-selected', String(button.dataset.tab === view.tab));
   });
   renderChips();
+  $('#search').placeholder = view.tab === 'attendance' ? 'Search attendees…' : 'Search…';
   const tableWrap = $('#table');
   tableWrap.classList.remove('tab-enter');
   tableWrap.innerHTML = renderTabContent();
@@ -419,113 +427,6 @@ async function exportAttendance() {
   document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
 }
 
-async function downloadCards(eventId, registrationIds, button) {
-  button.disabled = true;
-  button.textContent = 'Generating PDF…';
-  try {
-    const res = await fetch(`/api/admin/events/${eventId}/cards.pdf`, {
-      method: 'POST', credentials: 'same-origin',
-      headers: { Accept: 'application/pdf', 'Content-Type': 'application/json' },
-      body: JSON.stringify(registrationIds ? { registration_ids: registrationIds } : {}),
-    });
-    if (res.status === 401) throw Object.assign(new Error('Please log in again.'), { status: 401 });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || 'Card generation failed, please try again.');
-    }
-    const blob = await res.blob();
-    const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'identity-cards.pdf';
-    const url = URL.createObjectURL(blob);
-    const link = Object.assign(document.createElement('a'), { href: url, download: filename });
-    document.body.append(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    closeModal();
-  } finally {
-    button.disabled = false;
-    button.textContent = button.dataset.defaultLabel;
-  }
-}
-
-async function openCards() {
-  const { events } = await api('/api/admin/card-events');
-  if (!events.length) throw new Error('Create an event before generating identity cards.');
-  openModal(`
-    <div class="modal-head"><h2>Generate identity cards</h2><button type="button" class="btn small" data-close>Close</button></div>
-    <div class="field">
-      <label for="card-event">Event</label>
-      <select id="card-event">
-        ${events.map((event) => `<option value="${escapeHtml(event.id)}">${escapeHtml(event.name)} — ${event.confirmed_registrations} confirmed</option>`).join('')}
-      </select>
-    </div>
-    <div class="field">
-      <label for="card-search">Find attendees</label>
-      <input id="card-search" type="search" placeholder="Search name or company…">
-    </div>
-    <div class="card-selection-head">
-      <label><input id="card-select-visible" type="checkbox"> Select visible</label>
-      <strong id="card-selected-count">0 selected</strong>
-    </div>
-    <div class="card-selection" id="card-selection"><p class="muted empty">Loading attendees…</p></div>
-    <p class="alert"><strong>QR policy:</strong> an attendee keeps the same QR on every reprint. Printing newly registered people does not change previously issued cards.</p>
-    <p class="muted">The PDF uses one exact 8.56 cm × 5.4 cm landscape card per page.</p>
-    <p class="alert" id="modal-error" role="alert" hidden></p>
-    <div class="modal-actions">
-      <button type="button" class="btn" data-close>Cancel</button>
-      <button type="button" class="btn" id="generate-all" data-default-label="Print all">Print all</button>
-      <button type="button" class="btn primary" id="generate-cards" data-default-label="Print selected">Print selected</button>
-    </div>`);
-  let registrations = [];
-  const selected = new Set();
-
-  const renderChoices = () => {
-    const query = $('#card-search').value.trim().toLocaleLowerCase();
-    const visible = registrations.filter((item) => !query || `${item.name} ${item.company}`.toLocaleLowerCase().includes(query));
-    $('#card-selection').innerHTML = visible.length ? visible.map((item) => `
-      <label class="card-choice">
-        <input type="checkbox" value="${escapeHtml(item.id)}" ${selected.has(item.id) ? 'checked' : ''}>
-        <span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.company)}</small></span>
-        <span class="badge ${item.has_reusable_qr ? 'present' : 'pending'}">${item.has_reusable_qr ? 'QR saved' : 'New QR'}</span>
-      </label>`).join('') : '<p class="muted empty">No attendees match.</p>';
-    $('#card-selected-count').textContent = `${selected.size} selected`;
-    $('#card-select-visible').checked = visible.length > 0 && visible.every((item) => selected.has(item.id));
-    $('#generate-cards').disabled = selected.size === 0;
-    $('#card-selection').querySelectorAll('input').forEach((input) => input.addEventListener('change', () => {
-      if (input.checked) selected.add(input.value); else selected.delete(input.value);
-      renderChoices();
-    }));
-  };
-
-  const loadChoices = async () => {
-    selected.clear();
-    $('#card-selection').innerHTML = '<p class="muted empty">Loading attendees…</p>';
-    const result = await api(`/api/admin/events/${$('#card-event').value}/card-registrations`);
-    registrations = result.registrations;
-    renderChoices();
-  };
-
-  const generate = async (button, ids) => {
-    try {
-      await downloadCards($('#card-event').value, ids, button);
-    } catch (err) {
-      if (err.status === 401) showLogin();
-      else showModalError(escapeHtml(err.message));
-    }
-  };
-  $('#generate-cards').addEventListener('click', () => generate($('#generate-cards'), [...selected]));
-  $('#generate-all').addEventListener('click', () => generate($('#generate-all'), undefined));
-  $('#card-event').addEventListener('change', () => guarded(loadChoices));
-  $('#card-search').addEventListener('input', renderChoices);
-  $('#card-select-visible').addEventListener('change', (event) => {
-    const query = $('#card-search').value.trim().toLocaleLowerCase();
-    registrations.filter((item) => !query || `${item.name} ${item.company}`.toLocaleLowerCase().includes(query))
-      .forEach((item) => event.target.checked ? selected.add(item.id) : selected.delete(item.id));
-    renderChoices();
-  });
-  await loadChoices();
-}
-
 // ---------- events ----------
 
 document.addEventListener('click', (event) => {
@@ -580,7 +481,6 @@ $('#login-form').addEventListener('submit', async (event) => {
 });
 
 $('#refresh').addEventListener('click', refresh);
-$('#cards').addEventListener('click', () => guarded(openCards));
 $('#export').addEventListener('click', () => guarded(exportExcel));
 $('#logout').addEventListener('click', async () => {
   await api('/api/admin/logout', { method: 'POST' }).catch(() => {});
