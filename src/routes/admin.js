@@ -9,9 +9,6 @@ import { loadDashboard } from '../services/dashboard.js';
 import { buildWorkbook, exportFilename } from '../services/export.js';
 import { PHOTO_BUCKET, photoContentType } from '../services/photo.js';
 import {
-  cardPdfFilename, generateCardBatch, listCardEvents, listCardRegistrations,
-} from '../services/cards.js';
-import {
   attendanceFilename, buildAttendanceWorkbook, checkIn, listAttendanceDays, loadAttendance,
 } from '../services/attendance.js';
 
@@ -78,19 +75,6 @@ export function adminRoutes({ db, config, loginDelayMs }) {
     res.send(Buffer.from(buffer));
   });
 
-  router.get('/card-events', async (_req, res) => {
-    res.set('Cache-Control', 'no-store');
-    res.json({ events: await listCardEvents(db) });
-  });
-
-  router.get('/events/:id/card-registrations', async (req, res) => {
-    const eventId = participantId(req.params.id);
-    const result = await listCardRegistrations(db, eventId);
-    if (!result) throw errors.notFound();
-    res.set('Cache-Control', 'no-store');
-    res.json(result);
-  });
-
   router.get('/attendance-days', async (_req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json({ days: await listAttendanceDays(db) });
@@ -117,37 +101,6 @@ export function adminRoutes({ db, config, loginDelayMs }) {
       'Cache-Control': 'no-store',
     });
     res.send(Buffer.from(buffer));
-  });
-
-  router.post('/events/:id/cards.pdf', async (req, res) => {
-    const eventId = participantId(req.params.id);
-    let registrationIds;
-    if (req.body?.registration_ids !== undefined) {
-      if (!Array.isArray(req.body.registration_ids)
-          || !req.body.registration_ids.length
-          || req.body.registration_ids.length > 2000
-          || req.body.registration_ids.some((id) => !UUID_RE.test(id))
-          || new Set(req.body.registration_ids).size !== req.body.registration_ids.length) {
-        throw errors.validation({ registration_ids: 'Select between 1 and 2,000 unique attendees.' });
-      }
-      registrationIds = req.body.registration_ids;
-    }
-    const batch = await generateCardBatch(db, eventId, {
-      registrationIds,
-      secret: config.sessionSecret,
-    });
-    if (!batch) throw errors.notFound();
-    if (batch.empty) throw errors.conflict('This event has no confirmed registrations to print.');
-    if (batch.invalidSelection) throw errors.conflict('One or more selected registrations are no longer confirmed. Refresh and try again.');
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${cardPdfFilename(batch.event)}"`,
-      'Content-Length': String(batch.pdf.length),
-      'Cache-Control': 'no-store',
-      'X-Card-Credentials-Issued': String(batch.issued),
-      'X-Card-Credentials-Reused': String(batch.reused),
-    });
-    res.send(batch.pdf);
   });
 
   router.get('/participants/:id/photo', async (req, res) => {

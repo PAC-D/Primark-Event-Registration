@@ -65,37 +65,6 @@ describe('credentials and attendance', { skip: skipReason }, () => {
     assert.deepEqual(credentials.map((row) => row.status).sort(), ['active', 'revoked']);
   });
 
-  test('print preparation issues once and then permanently reuses the same QR', async () => {
-    const first = createCredential();
-    const firstResult = await check(db.rpc('prepare_event_credentials', {
-      p_event_id: fixture.event.id,
-      p_items: [{
-        registration_id: fixture.registration.id,
-        token_hash: first.tokenHash,
-        fallback_code_hash: first.fallbackHash,
-        print_payload: `v1.${'a'.repeat(80)}`,
-      }],
-    }));
-    assert.equal(firstResult[0].issued, true);
-    assert.equal(firstResult[0].token_hash, first.tokenHash);
-
-    const ignoredReplacement = createCredential();
-    const secondResult = await check(db.rpc('prepare_event_credentials', {
-      p_event_id: fixture.event.id,
-      p_items: [{
-        registration_id: fixture.registration.id,
-        token_hash: ignoredReplacement.tokenHash,
-        fallback_code_hash: ignoredReplacement.fallbackHash,
-        print_payload: `v1.${'b'.repeat(80)}`,
-      }],
-    }));
-    assert.equal(secondResult[0].issued, false);
-    assert.equal(secondResult[0].token_hash, first.tokenHash);
-    const active = await check(db.from('registration_credentials')
-      .select('token_hash').eq('registration_id', fixture.registration.id).eq('status', 'active'));
-    assert.deepEqual(active, [{ token_hash: first.tokenHash }]);
-  });
-
   test('invalid, wrong-event, cancelled, and closed-event scans return stable statuses', async () => {
     assert.equal((await check(scan(credentialHash('ER1.unknown'), fixture.days[0].id))).status, 'INVALID');
     assert.equal((await check(scan(fixture.credential.tokenHash, randomUUID()))).status, 'WRONG_EVENT');

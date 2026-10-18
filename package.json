@@ -15,7 +15,6 @@
     "seed:demo": "node --env-file=.env scripts/seed-demo.js",
     "db:apply": "node --env-file=.env scripts/apply-migration.js",
     "smoke:attendance": "node --env-file=.env scripts/smoke-attendance.js",
-    "smoke:cards": "node --env-file=.env scripts/smoke-cards.js",
     "backup": "node --env-file=.env scripts/backup.js",
     "backup:verify": "node scripts/verify-backup.js",
     "restore:storage": "node --env-file=.env scripts/restore-storage.js"
@@ -25,9 +24,7 @@
     "cookie-parser": "^1.4.7",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
-    "html5-qrcode": "^2.3.8",
-    "pdfkit": "^0.20.2",
-    "qrcode": "^1.5.4"
+    "html5-qrcode": "^2.3.8"
   },
   "devDependencies": {
     "pg": "^8.23.1",

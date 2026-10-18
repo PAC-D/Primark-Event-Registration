@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { loadConfig } from '../src/config.js';
 import { createDb } from '../src/db.js';
-import { createCredential, credentialHash, sealCredential } from '../src/services/credential.js';
+import { createCredential, credentialHash } from '../src/services/credential.js';
 
 const projectRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -55,7 +55,7 @@ async function main() {
   const event = await check(db.from('events').upsert({
     code: 'demo-2026',
     name: 'Carton Nomination Program',
-    subtitle: 'Identity card and attendance demonstration',
+    subtitle: 'Attendance scanner demonstration',
     venue: 'Crowne Plaza Dhaka Airport by IHG',
     organiser: 'PAC-D Bangladesh',
     timezone: 'Asia/Dhaka',
@@ -120,9 +120,6 @@ async function main() {
       p_token_hash: credential.tokenHash,
       p_fallback_code_hash: credential.fallbackHash,
     }), `Issue credential for ${person.email}`);
-    await check(db.from('registration_credentials').update({
-      print_payload: sealCredential(credential, config.sessionSecret),
-    }).eq('id', credentialId), `Save printable credential for ${person.email}`);
     credentials.push({
       name: person.name,
       email: person.email,
@@ -136,7 +133,7 @@ async function main() {
     if (index === 2) {
       await check(db.from('registration_credentials').update({
         status: 'revoked', revoked_at: new Date().toISOString(),
-      }).eq('id', credentialId), 'Create revoked-card scenario');
+      }).eq('id', credentialId), 'Create revoked-credential scenario');
       credentials[index].expectedStatus = 'REVOKED';
     }
     if (index === 3) {

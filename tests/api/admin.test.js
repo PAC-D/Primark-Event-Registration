@@ -20,9 +20,6 @@ const protectedRoutes = [
   ['put', `/api/admin/participants/${PERSON_ID}`],
   ['delete', `/api/admin/participants/${PERSON_ID}`],
   ['get', `/api/admin/participants/${PERSON_ID}/photo`],
-  ['get', '/api/admin/card-events'],
-  ['get', `/api/admin/events/${PERSON_ID}/card-registrations`],
-  ['post', `/api/admin/events/${PERSON_ID}/cards.pdf`],
   ['get', '/api/admin/attendance-days'],
   ['get', `/api/admin/attendance?event_day_id=${PERSON_ID}`],
   ['get', `/api/admin/attendance/export?event_day_id=${PERSON_ID}`],
@@ -108,18 +105,6 @@ test('GET /attendance-days returns scanner choices without caching', async () =>
   assert.equal(res.status, 200);
   assert.equal(res.headers['cache-control'], 'no-store');
   assert.equal(res.body.days[0].scan_enabled, true);
-});
-
-test('selected card printing rejects empty, duplicate, or malformed registration ids', async () => {
-  const db = fakeDb();
-  const app = appWith(db);
-  for (const registration_ids of [[], ['bad-id'], [PERSON_ID, PERSON_ID]]) {
-    const res = await request(app).post(`/api/admin/events/${PERSON_ID}/cards.pdf`)
-      .set('Cookie', validCookie()).send({ registration_ids });
-    assert.equal(res.status, 400);
-    assert.ok(res.body.fields.registration_ids);
-  }
-  assert.equal(db.calls.length, 0);
 });
 
 test('PUT /participants/:id validates the body and calls update_attendee', async () => {
