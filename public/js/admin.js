@@ -145,7 +145,8 @@ function renderParticipants() {
         ? `<a href="/api/admin/participants/${p.id}/photo" target="_blank" rel="noopener"><img class="photo-thumb" src="/api/admin/participants/${p.id}/photo" alt="Attendee photo"></a>`
         : '—',
       formatTime(p.created_at),
-      `<span class="row-actions"><button type="button" class="btn small" data-edit="${p.id}">Edit</button>
+      `<span class="row-actions"><button type="button" class="btn small" data-qr="${p.id}">QR code</button>
+       <button type="button" class="btn small" data-edit="${p.id}">Edit</button>
        <button type="button" class="btn small danger" data-delete="${p.id}">Delete</button></span>`,
     ]),
     'No participants match.',
@@ -412,6 +413,166 @@ async function exportExcel() {
   URL.revokeObjectURL(url);
 }
 
+async function downloadQrPdf(eventId, registrationIds, button) {
+  button.disabled = true;
+  button.textContent = 'Generating PDF…';
+  try {
+    const res = await fetch(`/api/admin/events/${eventId}/qrs.pdf`, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { Accept: 'application/pdf', 'Content-Type': 'application/json' },
+      body: JSON.stringify(registrationIds ? { registration_ids: registrationIds } : {}),
+    });
+    if (res.status === 401) throw Object.assign(new Error('Please log in again.'), { status: 401 });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || 'QR generation failed, please try again.');
+    }
+    const blob = await res.blob();
+    const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'qr-codes.pdf';
+    const url = URL.createObjectURL(blob);
+    const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    closeModal();
+  } finally {
+    button.disabled = false;
+    button.textContent = button.dataset.defaultLabel;
+  }
+}
+
+async function fetchIndividualQr(eventId, registrationId) {
+  const response = await fetch(`/api/admin/events/${eventId}/qr.png`, {
+    method: 'POST', credentials: 'same-origin',
+    headers: { Accept: 'image/png', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ registration_id: registrationId }),
+  });
+  if (response.status === 401) throw Object.assign(new Error('Please log in again.'), { status: 401 });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.message || 'QR generation failed.');
+  }
+  return {
+    blob: await response.blob(),
+    filename: /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')?.[1] ?? 'attendee-qr.png',
+  };
+}
+
+async function viewQr(eventId, registrationId) {
+  const popup = window.open('', '_blank');
+  try {
+    const { blob } = await fetchIndividualQr(eventId, registrationId);
+    const url = URL.createObjectURL(blob);
+    if (popup) {
+      popup.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } else {
+      URL.revokeObjectURL(url);
+      throw new Error('Allow pop-ups to view and print the QR code.');
+    }
+  } catch (error) {
+    popup?.close();
+    throw error;
+  }
+}
+
+async function downloadQr(eventId, registrationId, button) {
+  button.disabled = true;
+  try {
+    const { blob, filename } = await fetchIndividualQr(eventId, registrationId);
+    const url = URL.createObjectURL(blob);
+    const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+    document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function openQrs(attendeeId = '') {
+  const { events } = await api('/api/admin/qr-events');
+  if (!events.length) throw new Error('Create an event before generating QR codes.');
+  openModal(`
+    <div class="modal-head"><h2>QR codes</h2><button type="button" class="btn small" data-close>Close</button></div>
+    <div class="field">
+      <label for="qr-event">Event</label>
+      <select id="qr-event">
+        ${events.map((event) => `<option value="${escapeHtml(event.id)}">${escapeHtml(event.name)} — ${event.confirmed_registrations} confirmed</option>`).join('')}
+      </select>
+    </div>
+    <div class="field">
+      <label for="qr-search">Find attendees</label>
+      <input id="qr-search" type="search" placeholder="Search name or company…">
+    </div>
+    <div class="qr-selection-head">
+      <label><input id="qr-select-visible" type="checkbox"> Select visible</label>
+      <strong id="qr-selected-count">0 selected</strong>
+    </div>
+    <div class="qr-selection" id="qr-selection"><p class="muted empty">Loading attendees…</p></div>
+    <p class="alert" id="modal-error" role="alert" hidden></p>
+    <div class="modal-actions">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="button" class="btn" id="generate-all" data-default-label="Download all">Download all</button>
+      <button type="button" class="btn primary" id="generate-qrs" data-default-label="Download selected">Download selected</button>
+    </div>`);
+  let registrations = [];
+  const selected = new Set();
+
+  const visibleRegistrations = () => {
+    const query = $('#qr-search').value.trim().toLocaleLowerCase();
+    return registrations.filter((item) => !query || `${item.name} ${item.company}`.toLocaleLowerCase().includes(query));
+  };
+  const renderChoices = () => {
+    const visible = visibleRegistrations();
+    $('#qr-selection').innerHTML = visible.length ? visible.map((item) => `
+      <div class="qr-choice">
+        <label><input type="checkbox" value="${escapeHtml(item.id)}" ${selected.has(item.id) ? 'checked' : ''}>
+        <span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.company)}</small></span>
+        </label>
+        <span class="row-actions"><button type="button" class="btn small" data-view-qr="${escapeHtml(item.id)}">View / print</button><button type="button" class="btn small" data-download-qr="${escapeHtml(item.id)}">Download</button></span>
+      </div>`).join('') : '<p class="muted empty">No attendees match.</p>';
+    $('#qr-selected-count').textContent = `${selected.size} selected`;
+    $('#qr-select-visible').checked = visible.length > 0 && visible.every((item) => selected.has(item.id));
+    $('#generate-qrs').disabled = selected.size === 0;
+    $('#qr-selection').querySelectorAll('input').forEach((input) => input.addEventListener('change', () => {
+      if (input.checked) selected.add(input.value); else selected.delete(input.value);
+      renderChoices();
+    }));
+    $('#qr-selection').querySelectorAll('[data-view-qr]').forEach((button) => button.addEventListener('click', () =>
+      guarded(() => viewQr($('#qr-event').value, button.dataset.viewQr))));
+    $('#qr-selection').querySelectorAll('[data-download-qr]').forEach((button) => button.addEventListener('click', () =>
+      guarded(() => downloadQr($('#qr-event').value, button.dataset.downloadQr, button))));
+  };
+
+  const loadChoices = async () => {
+    selected.clear();
+    $('#qr-selection').innerHTML = '<p class="muted empty">Loading attendees…</p>';
+    const result = await api(`/api/admin/events/${$('#qr-event').value}/qr-registrations`);
+    registrations = result.registrations;
+    const requested = registrations.find((item) => item.attendee_id === attendeeId);
+    if (requested) selected.add(requested.id);
+    renderChoices();
+  };
+
+  const generate = async (button, ids) => {
+    try {
+      await downloadQrPdf($('#qr-event').value, ids, button);
+    } catch (err) {
+      if (err.status === 401) showLogin();
+      else showModalError(escapeHtml(err.message));
+    }
+  };
+  $('#generate-qrs').addEventListener('click', () => generate($('#generate-qrs'), [...selected]));
+  $('#generate-all').addEventListener('click', () => generate($('#generate-all'), undefined));
+  $('#qr-event').addEventListener('change', () => guarded(loadChoices));
+  $('#qr-search').addEventListener('input', renderChoices);
+  $('#qr-select-visible').addEventListener('change', (event) => {
+    visibleRegistrations().forEach((item) => event.target.checked ? selected.add(item.id) : selected.delete(item.id));
+    renderChoices();
+  });
+  await loadChoices();
+}
+
 async function exportAttendance() {
   if (!attendanceDayId) throw new Error('Choose an event day.');
   const res = await fetch(`/api/admin/attendance/export?event_day_id=${encodeURIComponent(attendanceDayId)}`, { credentials: 'same-origin' });
@@ -440,7 +601,9 @@ document.addEventListener('click', (event) => {
   } else if (d.chipGroup) {
     view[d.chipGroup] = d.chipValue;
     renderTab({ animate: true });
-  } else if (d.edit) openEdit(d.edit);
+  } else if ('qrs' in d) guarded(() => openQrs());
+  else if (d.qr) guarded(() => openQrs(d.qr));
+  else if (d.edit) openEdit(d.edit);
   else if (d.delete) confirmDelete(d.delete);
   else if (d.approve) guarded(async () => {
     await api(`/api/admin/organisations/${d.approve}/approve`, { method: 'POST' });

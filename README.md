@@ -12,7 +12,7 @@ The repository includes registration, online mobile scanning, attendance reporti
 - Maximum two attendees charged to each supplier and one to each factory.
 - Required contact details and designation; optional JPEG/PNG photo up to 1 MiB.
 - Duplicate-email prevention and transactional seat enforcement.
-- Admin dashboard, charts, filters, editing, deletion, and Excel export.
+- Admin dashboard, charts, filters, editing, deletion, Excel export, and QR generation.
 - Pending organisation approval and merge operations.
 - Optional confirmation email through a Power Automate webhook.
 - Canonical supplier/factory import.
@@ -22,6 +22,8 @@ The repository includes registration, online mobile scanning, attendance reporti
 - Guarded realistic demo-data generation for scanner development.
 - Mobile-first admin scanner with camera/image scanning and manual fallback-code entry.
 - Immediate identity/photo verification, duplicate detection, and per-day attendance recording.
+- Stable per-attendee QR codes with individual view/download and multi-select or bulk PDF printing.
+- Public QR verification showing the attendee photo, name, email, phone, designation, organisation, and event.
 - Attendance dashboard, live refresh, and day-specific Excel export.
 
 ### Not implemented
@@ -75,7 +77,7 @@ src/
   errors.js                  Stable API error mapping
   routes/                    Public, photo, and admin endpoints
   services/                  Dashboard, attendance, export, import, notification, photos
-supabase/migrations/         Ordered migrations 001–011
+supabase/migrations/         Ordered migrations 001–012
 scripts/
   apply-migration.js         Apply named SQL migrations through DATABASE_URL
   import-orgs.js             Organisation import entry point
@@ -118,6 +120,8 @@ Organisation rows are locked in stable ID order before capacity checks, preventi
 ### Admin
 
 Authenticated administrators can view summaries, filter participants, edit/delete attendees, view private photos, approve/merge organisations, and export Excel data.
+
+The Participants tab can view or download an individual's plain QR code, or download selected/all QR codes as a one-QR-per-page PDF. Once issued, an attendee's opaque QR credential is reused. Editing attendee details changes the verified profile without changing the QR.
 
 ### Photos
 
@@ -180,6 +184,10 @@ For full organisations, the public catalogue exposes only registrant name/design
 | `POST` | `/api/admin/logout` | Clear session |
 | `GET` | `/api/admin/data` | Dashboard data |
 | `GET` | `/api/admin/export` | Excel export |
+| `GET` | `/api/admin/qr-events` | Events available for QR generation |
+| `GET` | `/api/admin/events/:id/qr-registrations` | Confirmed attendees available for QR generation |
+| `POST` | `/api/admin/events/:id/qr.png` | View or download one attendee QR as PNG |
+| `POST` | `/api/admin/events/:id/qrs.pdf` | Generate selected or all QR codes as PDF |
 | `GET` | `/api/admin/attendance-days` | Event/day choices for scanner and dashboard |
 | `POST` | `/api/admin/attendance/check-in` | Verify QR/fallback and record attendance |
 | `GET` | `/api/admin/attendance?event_day_id=…` | Day roster and attendance summary |
@@ -221,7 +229,7 @@ Never commit `.env`, secret keys, webhook URLs, database exports, or attendee da
 
 ## Local development
 
-Requirements: Node.js 24, a development Supabase project, and migrations `001–011`.
+Requirements: Node.js 24, a development Supabase project, and migrations `001–012`.
 
 ```bash
 npm install
@@ -236,7 +244,7 @@ npm run dev
 - Public attendee verification: `http://localhost:3000/verify.html#ER1.example-token`
 - Maintenance: `http://localhost:3000/maintenance`
 
-Public-facing QR codes should contain `https://YOUR_HOST/verify.html#<opaque-credential>`. A phone camera opens the mobile verification page without an admin login. The fragment is submitted to a read-only endpoint and is not included in the initial HTTP request or referrer. Viewing the profile never records attendance; the authenticated staff scanner understands the same URL and performs check-in separately.
+Generated QR codes contain `https://YOUR_HOST/verify.html#<opaque-credential>`. A phone camera opens the mobile verification page without an admin login and shows the current photo, name, email, phone, designation, organisation, and event. The fragment is submitted to a read-only endpoint and is not included in the initial HTTP request or referrer. Viewing the profile never records attendance; the authenticated staff scanner understands the same URL and performs check-in separately.
 
 ```bash
 npm run dev
@@ -485,10 +493,13 @@ Requirements:
 - Encode no name, email, phone, organisation, or photo URL.
 - Encode no API/Supabase secret.
 - Store only `SHA-256(raw token)` in database/offline roster.
+- Keep the printable token only as an authenticated server-encrypted payload so reprints stay identical.
 - Support revoke and rotate without changing registration ID.
 - Support a short manual fallback code.
 
 Do not use only the attendee UUID: it is permanent and cannot be independently rotated after a leaked/copied credential.
+
+Normal attendee edits never rotate a credential. A legacy hash-only credential is replaced once when its first downloadable QR is generated because a SHA-256 hash cannot recover the original token; every later generation reuses that same credential.
 
 A scanned QR can be copied. Online duplicate detection helps but does not prove identity; staff should verify the attendee details returned after a successful scan.
 

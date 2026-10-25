@@ -52,7 +52,9 @@ export const BACKUP_TABLES = [
   },
   {
     name: 'registration_credentials',
-    columns: ['id', 'registration_id', 'token_hash', 'fallback_code_hash', 'status', 'issued_at', 'revoked_at'],
+    columns: ['id', 'registration_id', 'token_hash', 'fallback_code_hash', 'status', 'issued_at', 'revoked_at', 'print_payload'],
+    // Allows a safety backup immediately before migration 012 adds this column.
+    optionalColumns: ['print_payload'],
     order: ['registration_id', 'issued_at'],
   },
   {
@@ -131,7 +133,18 @@ export async function readTable(db, table, pageSize = PAGE_SIZE) {
     for (const column of table.order) query = query.order(column, { ascending: true });
 
     const { data, error, count } = await query.range(offset, offset + pageSize - 1);
-    if (error) throw new Error(`Could not back up ${table.name}: ${error.message}`);
+    if (error) {
+      const optional = table.optionalColumns?.find((column) => table.columns.includes(column)
+        && (error.code === '42703' || error.message?.includes(column)));
+      if (optional) {
+        return readTable(db, {
+          ...table,
+          columns: table.columns.filter((column) => column !== optional),
+          optionalColumns: table.optionalColumns.filter((column) => column !== optional),
+        }, pageSize);
+      }
+      throw new Error(`Could not back up ${table.name}: ${error.message}`);
+    }
     if (offset === 0) expectedCount = count;
     rows.push(...data);
     if (data.length < pageSize) break;

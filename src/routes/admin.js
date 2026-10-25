@@ -9,6 +9,9 @@ import { loadDashboard } from '../services/dashboard.js';
 import { buildWorkbook, exportFilename } from '../services/export.js';
 import { PHOTO_BUCKET, photoContentType } from '../services/photo.js';
 import {
+  generateQrPdf, generateQrPng, listQrEvents, listQrRegistrations, qrPdfFilename, qrPngFilename,
+} from '../services/qr.js';
+import {
   attendanceFilename, buildAttendanceWorkbook, checkIn, listAttendanceDays, loadAttendance,
 } from '../services/attendance.js';
 
@@ -75,6 +78,19 @@ export function adminRoutes({ db, config, loginDelayMs }) {
     res.send(Buffer.from(buffer));
   });
 
+  router.get('/qr-events', async (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ events: await listQrEvents(db) });
+  });
+
+  router.get('/events/:id/qr-registrations', async (req, res) => {
+    const eventId = participantId(req.params.id);
+    const result = await listQrRegistrations(db, eventId);
+    if (!result) throw errors.notFound();
+    res.set('Cache-Control', 'no-store');
+    res.json(result);
+  });
+
   router.get('/attendance-days', async (_req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json({ days: await listAttendanceDays(db) });
@@ -101,6 +117,59 @@ export function adminRoutes({ db, config, loginDelayMs }) {
       'Cache-Control': 'no-store',
     });
     res.send(Buffer.from(buffer));
+  });
+
+  router.post('/events/:id/qrs.pdf', async (req, res) => {
+    const eventId = participantId(req.params.id);
+    let registrationIds;
+    if (req.body?.registration_ids !== undefined) {
+      if (!Array.isArray(req.body.registration_ids)
+          || !req.body.registration_ids.length
+          || req.body.registration_ids.length > 2000
+          || req.body.registration_ids.some((id) => !UUID_RE.test(id))
+          || new Set(req.body.registration_ids).size !== req.body.registration_ids.length) {
+        throw errors.validation({ registration_ids: 'Select between 1 and 2,000 unique attendees.' });
+      }
+      registrationIds = req.body.registration_ids;
+    }
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const batch = await generateQrPdf(db, eventId, {
+      registrationIds,
+      secret: config.sessionSecret,
+      baseUrl,
+    });
+    if (!batch) throw errors.notFound();
+    if (batch.empty) throw errors.conflict('This event has no confirmed registrations to print.');
+    if (batch.invalidSelection) throw errors.conflict('One or more selected registrations are no longer confirmed. Refresh and try again.');
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${qrPdfFilename(batch.event)}"`,
+      'Content-Length': String(batch.pdf.length),
+      'Cache-Control': 'no-store',
+    });
+    res.send(batch.pdf);
+  });
+
+  router.post('/events/:id/qr.png', async (req, res) => {
+    const eventId = participantId(req.params.id);
+    const registrationId = participantId(req.body?.registration_id);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const result = await generateQrPng(db, eventId, {
+      registrationId,
+      secret: config.sessionSecret,
+      baseUrl,
+    });
+    if (!result) throw errors.notFound();
+    if (result.empty || result.invalidSelection) {
+      throw errors.conflict('This registration is no longer available. Refresh and try again.');
+    }
+    res.set({
+      'Content-Type': 'image/png',
+      'Content-Disposition': `inline; filename="${qrPngFilename(result.registrations[0])}"`,
+      'Content-Length': String(result.png.length),
+      'Cache-Control': 'no-store',
+    });
+    res.send(result.png);
   });
 
   router.get('/participants/:id/photo', async (req, res) => {

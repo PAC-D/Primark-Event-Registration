@@ -65,7 +65,7 @@ test('a public QR profile returns verified attendee details without recording at
         id: 'registration-1',
         status: 'confirmed',
         attendees: {
-          id: 'attendee-1', name: 'Amina Rahman', email: 'amina@example.com', designation: 'Merchandiser',
+          id: 'attendee-1', name: 'Amina Rahman', email: 'amina@example.com', phone: '+8801711000000', designation: 'Merchandiser',
           from_type: 'supplier', organisation_name: null, photo_path: 'person.png',
         },
         events: { name: 'Carton Nomination Program', subtitle: 'Bangladesh Origin' },
@@ -79,6 +79,7 @@ test('a public QR profile returns verified attendee details without recording at
   assert.deepEqual(res.body, {
     name: 'Amina Rahman',
     email: 'amina@example.com',
+    phone: '+8801711000000',
     designation: 'Merchandiser',
     attendee_type: 'supplier',
     organisation: 'Example Supplier',

@@ -67,6 +67,9 @@ async function loadProfile() {
     const email = $('#profile-email');
     email.textContent = profile.email || 'Not provided';
     if (profile.email) email.href = `mailto:${profile.email}`; else email.removeAttribute('href');
+    const phone = $('#profile-phone');
+    phone.textContent = profile.phone || 'Not provided';
+    if (profile.phone) phone.href = `tel:${profile.phone.replace(/[^+\d]/g, '')}`; else phone.removeAttribute('href');
     $('#profile-loading').hidden = true;
     $('#profile-result').hidden = false;
     await loadPhoto(credential, profile);

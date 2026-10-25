@@ -12,6 +12,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export function createApp({ db, config, loginDelayMs = 1000 }) {
   const app = express();
   app.disable('x-powered-by');
+  // Hosted deployments terminate HTTPS at one trusted proxy; generated QR URLs must preserve it.
+  app.set('trust proxy', 1);
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
 

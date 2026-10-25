@@ -28,7 +28,7 @@ export async function loadPublicProfile(db, value) {
 
   const registrations = await runQuery(db.from('event_registrations')
     .select(`id, status,
-      attendees(id, name, email, designation, from_type, organisation_name, photo_path),
+      attendees(id, name, email, phone, designation, from_type, organisation_name, photo_path),
       events(name, subtitle),
       registration_orgs(kind, name)`)
     .eq('id', credential.registration_id)
@@ -42,6 +42,7 @@ export async function loadPublicProfile(db, value) {
     profile: {
       name: attendee.name || 'Unnamed attendee',
       email: attendee.email || '',
+      phone: attendee.phone || '',
       designation: attendee.designation || '',
       attendee_type: attendee.from_type || 'other',
       organisation: organisation(attendee, registration.registration_orgs ?? []),

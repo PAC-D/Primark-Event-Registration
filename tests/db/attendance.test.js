@@ -65,6 +65,39 @@ describe('credentials and attendance', { skip: skipReason }, () => {
     assert.deepEqual(credentials.map((row) => row.status).sort(), ['active', 'revoked']);
   });
 
+  test('print preparation issues once and reuses the same credential on every reprint', async () => {
+    const first = createCredential();
+    const second = createCredential();
+    const prepare = (credential, payloadValue) => db.rpc('prepare_event_credentials', {
+      p_event_id: fixture.event.id,
+      p_items: [{
+        registration_id: fixture.registration.id,
+        token_hash: credential.tokenHash,
+        fallback_code_hash: credential.fallbackHash,
+        print_payload: payloadValue,
+      }],
+    });
+    const firstRows = await check(prepare(first, `v1.${'a'.repeat(80)}`));
+    const secondRows = await check(prepare(second, `v1.${'b'.repeat(80)}`));
+    assert.equal(firstRows[0].issued, true);
+    assert.equal(secondRows[0].issued, false);
+    assert.equal(secondRows[0].token_hash, first.tokenHash);
+    assert.equal(secondRows[0].print_payload, firstRows[0].print_payload);
+  });
+
+  test('new attendees automatically join the current event with organisation snapshots', async () => {
+    const { factory } = await seedOrgs(db, {
+      factory: { kind: 'factory', name: 'New Registration Factory', code: 'NEW-1' },
+    });
+    const attendeeId = await check(register(db, payload({ email: 'new-event-link@example.com', orgs: [pick(factory)] })));
+    const registrations = await check(db.from('event_registrations')
+      .select('id, registration_orgs(kind, name, code)')
+      .eq('event_id', fixture.event.id)
+      .eq('attendee_id', attendeeId));
+    assert.equal(registrations.length, 1);
+    assert.deepEqual(registrations[0].registration_orgs, [{ kind: 'factory', name: 'New Registration Factory', code: 'NEW-1' }]);
+  });
+
   test('invalid, wrong-event, cancelled, and closed-event scans return stable statuses', async () => {
     assert.equal((await check(scan(credentialHash('ER1.unknown'), fixture.days[0].id))).status, 'INVALID');
     assert.equal((await check(scan(fixture.credential.tokenHash, randomUUID()))).status, 'WRONG_EVENT');

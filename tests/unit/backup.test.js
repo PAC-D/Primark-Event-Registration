@@ -5,6 +5,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import {
   missingReferencedPhotos,
+  readTable,
   renderDatabaseSql,
   sha256,
   sqlValue,
@@ -44,6 +45,31 @@ test('missing referenced photos are detected', () => {
 test('sha256 is stable for buffers and strings', () => {
   assert.equal(sha256('hello'), sha256(Buffer.from('hello')));
   assert.equal(sha256('hello').length, 64);
+});
+
+test('pre-migration backups omit an optional column that does not exist yet', async () => {
+  const selections = [];
+  const db = {
+    from: () => {
+      let columns;
+      const query = {
+        select(value) { columns = value; selections.push(value); return query; },
+        order() { return query; },
+        range() {
+          return columns.includes('print_payload')
+            ? Promise.resolve({ data: null, error: { code: '42703', message: 'column registration_credentials.print_payload does not exist' } })
+            : Promise.resolve({ data: [{ id: 'credential-1' }], error: null, count: 1 });
+        },
+      };
+      return query;
+    },
+  };
+  const rows = await readTable(db, {
+    name: 'registration_credentials',
+    columns: ['id', 'print_payload'], optionalColumns: ['print_payload'], order: ['id'],
+  });
+  assert.deepEqual(rows, [{ id: 'credential-1' }]);
+  assert.deepEqual(selections, ['id,print_payload', 'id']);
 });
 
 test('backup paths cannot escape the selected directory', () => {
