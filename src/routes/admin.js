@@ -182,6 +182,13 @@ export function adminRoutes({ db, config, loginDelayMs }) {
     res.send(Buffer.from(await data.arrayBuffer()));
   });
 
+  router.post('/participants', async (req, res) => {
+    const result = validateRegistration(req.body);
+    if (!result.ok) throw errors.validation(result.fields);
+    const id = await callRpc(db, 'admin_register_attendee', { p: result.value });
+    res.status(201).json({ id });
+  });
+
   router.put('/participants/:id', async (req, res) => {
     const id = participantId(req.params.id);
     const result = validateRegistration(req.body);

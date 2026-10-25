@@ -125,7 +125,7 @@ function renderResult(result) {
   panel.innerHTML = `
     <div class="result-mark" aria-hidden="true">${kind === 'good' ? '✓' : kind === 'warn' ? '!' : '×'}</div>
     <h2>${escapeHtml(title)}</h2><p>${escapeHtml(detail)}</p>
-    ${accepted ? `<div class="scanner-person">${photo}<div><strong>${escapeHtml(result.name)}</strong><span>${escapeHtml(result.designation || '—')}</span><span>${escapeHtml(result.email || '—')}</span><span>${escapeHtml(result.phone || '—')}</span><span>${escapeHtml(result.organisation || '—')}</span><span>${escapeHtml(result.event)} · ${escapeHtml(result.day)}</span><small>First check-in: ${result.checked_in_at ? formatTime(result.checked_in_at) : 'just now'}</small></div></div>` : ''}
+    ${accepted ? `<div class="scanner-person">${photo}<div><strong>${escapeHtml(result.name)}</strong><span>${escapeHtml(result.designation || '—')}</span><span>${escapeHtml(result.email || '—')}</span><span>${escapeHtml(result.organisation || '—')}</span><span>${escapeHtml(result.event)} · ${escapeHtml(result.day)}</span><small>First check-in: ${result.checked_in_at ? formatTime(result.checked_in_at) : 'just now'}</small></div></div>` : ''}
     <button class="btn primary scanner-main-button" id="scan-next" type="button">Scan next attendee</button>`;
   panel.hidden = false;
   $('#scan-next').addEventListener('click', startScanner);

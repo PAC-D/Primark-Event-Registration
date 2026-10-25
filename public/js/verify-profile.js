@@ -59,17 +59,20 @@ async function loadProfile() {
   try {
     const response = await request('/api/attendee-profile', credential);
     const profile = await response.json();
+    const isOther = profile.attendee_type === 'other';
     $('#profile-name').textContent = profile.name;
     $('#profile-role').textContent = profile.designation || 'Registered attendee';
-    $('#profile-company').textContent = profile.organisation;
+    $('#profile-supplier').textContent = profile.supplier || '—';
+    $('#profile-factory').textContent = profile.factory || '—';
+    $('#profile-organisation').textContent = profile.organisation_name || 'Not provided';
+    $('#profile-supplier-row').hidden = isOther;
+    $('#profile-factory-row').hidden = isOther;
+    $('#profile-organisation-row').hidden = !isOther;
+    $('#profile-type-row').hidden = isOther;
     $('#profile-type').textContent = TYPE_LABELS[profile.attendee_type] || 'Other';
-    $('#profile-event').textContent = [profile.event, profile.event_subtitle].filter(Boolean).join(' · ') || 'Current event';
     const email = $('#profile-email');
     email.textContent = profile.email || 'Not provided';
     if (profile.email) email.href = `mailto:${profile.email}`; else email.removeAttribute('href');
-    const phone = $('#profile-phone');
-    phone.textContent = profile.phone || 'Not provided';
-    if (profile.phone) phone.href = `tel:${profile.phone.replace(/[^+\d]/g, '')}`; else phone.removeAttribute('href');
     $('#profile-loading').hidden = true;
     $('#profile-result').hidden = false;
     await loadPhoto(credential, profile);

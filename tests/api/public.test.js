@@ -65,10 +65,9 @@ test('a public QR profile returns verified attendee details without recording at
         id: 'registration-1',
         status: 'confirmed',
         attendees: {
-          id: 'attendee-1', name: 'Amina Rahman', email: 'amina@example.com', phone: '+8801711000000', designation: 'Merchandiser',
+          id: 'attendee-1', name: 'Amina Rahman', email: 'amina@example.com', designation: 'Merchandiser',
           from_type: 'supplier', organisation_name: null, photo_path: 'person.png',
         },
-        events: { name: 'Carton Nomination Program', subtitle: 'Bangladesh Origin' },
         registration_orgs: [{ kind: 'supplier', name: 'Example Supplier' }],
       }], error: null },
     },
@@ -79,16 +78,37 @@ test('a public QR profile returns verified attendee details without recording at
   assert.deepEqual(res.body, {
     name: 'Amina Rahman',
     email: 'amina@example.com',
-    phone: '+8801711000000',
     designation: 'Merchandiser',
     attendee_type: 'supplier',
-    organisation: 'Example Supplier',
-    event: 'Carton Nomination Program',
-    event_subtitle: 'Bangladesh Origin',
+    supplier: 'Example Supplier',
+    factory: '',
+    organisation_name: '',
     has_photo: true,
   });
   assert.equal(db.calls.some((call) => call.fn === 'check_in_registration'), false);
   assert.equal(db.calls.some((call) => call.table === 'attendance'), false);
+});
+
+test('an other-attendee QR profile returns only its organisation identity fields', async () => {
+  const db = fakeDb({
+    tables: {
+      registration_credentials: { data: [{ registration_id: 'registration-1', status: 'active' }], error: null },
+      event_registrations: { data: [{
+        id: 'registration-1', status: 'confirmed',
+        attendees: {
+          id: 'attendee-1', name: 'Nadia Islam', email: 'nadia@example.com', designation: 'Lead',
+          from_type: 'other', organisation_name: 'Primark Limited', photo_path: null,
+        },
+        registration_orgs: [],
+      }], error: null },
+    },
+  });
+  const res = await request(appWith(db)).post('/api/attendee-profile').send({ credential: 'ER1.public-test-token' });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.organisation_name, 'Primark Limited');
+  assert.equal(res.body.supplier, '');
+  assert.equal(res.body.factory, '');
+  assert.equal('phone' in res.body, false);
 });
 
 test('the public QR photo endpoint re-verifies the credential and streams the private photo', async () => {
@@ -98,7 +118,7 @@ test('the public QR photo endpoint re-verifies the credential and streams the pr
       event_registrations: { data: [{
         id: 'registration-1', status: 'confirmed',
         attendees: { name: 'Amina', email: '', from_type: 'other', photo_path: 'person.png' },
-        events: { name: 'Event' }, registration_orgs: [],
+        registration_orgs: [],
       }], error: null },
     },
   });
