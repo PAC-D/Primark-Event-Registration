@@ -23,7 +23,7 @@ The repository includes registration, online mobile scanning, attendance reporti
 - Mobile-first admin scanner with camera/image scanning and manual fallback-code entry.
 - Immediate identity/photo verification, duplicate detection, and per-day attendance recording.
 - Stable per-attendee QR codes with individual view/download and multi-select or bulk PDF printing.
-- Public QR verification showing the attendee photo, name, email, phone, designation, organisation, and event.
+- Public QR verification showing the attendee photo, name, designation, supplier/factory or other organisation, email, and attending side.
 - Attendance dashboard, live refresh, and day-specific Excel export.
 
 ### Not implemented
@@ -77,7 +77,7 @@ src/
   errors.js                  Stable API error mapping
   routes/                    Public, photo, and admin endpoints
   services/                  Dashboard, attendance, export, import, notification, photos
-supabase/migrations/         Ordered migrations 001–012
+supabase/migrations/         Ordered migrations 001–013
 scripts/
   apply-migration.js         Apply named SQL migrations through DATABASE_URL
   import-orgs.js             Organisation import entry point
@@ -119,7 +119,7 @@ Organisation rows are locked in stable ID order before capacity checks, preventi
 
 ### Admin
 
-Authenticated administrators can view summaries, filter participants, edit/delete attendees, view private photos, approve/merge organisations, and export Excel data.
+Authenticated administrators can view summaries, filter participants, add attendees without public seat limits, edit/delete attendees, view private photos, approve/merge organisations, and export Excel data.
 
 The Participants tab can view or download an individual's plain QR code, or download selected/all QR codes as a one-QR-per-page PDF. Once issued, an attendee's opaque QR credential is reused. Editing attendee details changes the verified profile without changing the QR.
 
@@ -193,6 +193,7 @@ For full organisations, the public catalogue exposes only registrant name/design
 | `GET` | `/api/admin/attendance?event_day_id=…` | Day roster and attendance summary |
 | `GET` | `/api/admin/attendance/export?event_day_id=…` | Day-specific Excel export |
 | `GET` | `/api/admin/participants/:id/photo` | Private photo |
+| `POST` | `/api/admin/participants` | Add a participant without public seat limits |
 | `PUT` | `/api/admin/participants/:id` | Update participant |
 | `DELETE` | `/api/admin/participants/:id` | Delete participant |
 | `POST` | `/api/admin/organisations/:id/approve` | Approve pending organisation |
@@ -229,7 +230,7 @@ Never commit `.env`, secret keys, webhook URLs, database exports, or attendee da
 
 ## Local development
 
-Requirements: Node.js 24, a development Supabase project, and migrations `001–012`.
+Requirements: Node.js 24, a development Supabase project, and migrations `001–013`.
 
 ```bash
 npm install
@@ -244,7 +245,7 @@ npm run dev
 - Public attendee verification: `http://localhost:3000/verify.html#ER1.example-token`
 - Maintenance: `http://localhost:3000/maintenance`
 
-Generated QR codes contain `https://YOUR_HOST/verify.html#<opaque-credential>`. A phone camera opens the mobile verification page without an admin login and shows the current photo, name, email, phone, designation, organisation, and event. The fragment is submitted to a read-only endpoint and is not included in the initial HTTP request or referrer. Viewing the profile never records attendance; the authenticated staff scanner understands the same URL and performs check-in separately.
+Generated QR codes contain `https://YOUR_HOST/verify.html#<opaque-credential>`. A phone camera opens the mobile verification page without an admin login and shows the current photo, name, designation, supplier/factory or other organisation, email, and attending side. The fragment is submitted to a read-only endpoint and is not included in the initial HTTP request or referrer. The authenticated staff scanner understands the same URL and performs check-in separately.
 
 ```bash
 npm run dev
