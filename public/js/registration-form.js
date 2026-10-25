@@ -27,8 +27,14 @@ let nextKey = 0;
  *   submitLabel button text
  *   onSubmit    async (payload) => void; throw an api() error to show it on the form
  *   reloadOrgs  async () => orgs; used to refresh seat hints after SEAT_FULL
+ *   showSeatStatus false hides public capacity notices in the unrestricted admin-add form
+ *   requireFullName false accepts a single-part admin-entered name when otherwise valid
+ *   keepOrgPickerOpen true keeps the organisation list open while several are selected
  */
-export function mountRegistrationForm(container, { orgs, initial = null, submitLabel = 'Register', onSubmit, reloadOrgs = null }) {
+export function mountRegistrationForm(container, {
+  orgs, initial = null, submitLabel = 'Register', onSubmit, reloadOrgs = null,
+  showSeatStatus = true, requireFullName = true, keepOrgPickerOpen = false,
+}) {
   const uid = ++nextKey;
   let orgList = orgs;
 
@@ -155,6 +161,7 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
     form.querySelector(`[data-picker="${kind}"]`),
     {
       maxOptions: 500,
+      closeAfterSelect: !keepOrgPickerOpen,
       searchField: ['text'],
       render: {
         option: (data, escape) => `<div>${escape(data.text)}</div>`,
@@ -259,7 +266,7 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
 
   function rowHtml(row, own) {
     const org = orgList.find((o) => o.id === row.org_id);
-    const full = org ? seatInfo(org, state.fromType, own.has(row.org_id)).full : false;
+    const full = showSeatStatus && org ? seatInfo(org, state.fromType, own.has(row.org_id)).full : false;
     const pendingNote = !org ? ' <em class="muted">(pending approval)</em>' : '';
     const classes = ['org-row'];
     if (full) classes.push('is-full');
@@ -408,7 +415,7 @@ export function mountRegistrationForm(container, { orgs, initial = null, submitL
     const result = validateRegistration(payload);
     // Front-end only: a full name is at least two words (the server keeps its own length rule).
     const fields = result.ok ? {} : { ...result.fields };
-    if (!fields.name && payload.name.trim().split(/\s+/).filter(Boolean).length < 2) {
+    if (requireFullName && !fields.name && payload.name.trim().split(/\s+/).filter(Boolean).length < 2) {
       fields.name = 'Enter your full name.';
     }
     if (Object.keys(fields).length) {

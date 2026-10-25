@@ -303,6 +303,30 @@ async function runModalAction(action) {
   }
 }
 
+function openAddParticipant() {
+  openModal(`
+    <div class="modal-head"><h2>Add participant</h2><button type="button" class="btn small" data-close>Close</button></div>
+    <div id="add-participant-form" class="admin-add-form"></div>`);
+  const form = mountRegistrationForm($('#add-participant-form'), {
+    orgs: data.organisations,
+    submitLabel: 'Add participant',
+    showSeatStatus: false,
+    requireFullName: false,
+    keepOrgPickerOpen: true,
+    onSubmit: async (payload) => {
+      try {
+        await api('/api/admin/participants', { method: 'POST', body: payload });
+      } catch (err) {
+        if (err.status === 401) { showLogin(); return; }
+        throw err;
+      }
+      closeModal();
+      await refresh();
+    },
+  });
+  modalCleanup = () => form.destroy();
+}
+
 function openEdit(id) {
   const person = data.participants.find((p) => p.id === id);
   if (!person) return;
@@ -694,6 +718,7 @@ $('#login-form').addEventListener('submit', async (event) => {
 });
 
 $('#refresh').addEventListener('click', refresh);
+$('#add-participant').addEventListener('click', openAddParticipant);
 $('#export').addEventListener('click', () => guarded(exportExcel));
 $('#logout').addEventListener('click', async () => {
   await api('/api/admin/logout', { method: 'POST' }).catch(() => {});
