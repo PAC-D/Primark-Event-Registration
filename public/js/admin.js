@@ -272,6 +272,7 @@ const modal = $('#modal');
 function openModal(html) {
   closeModal();
   $('#modal-body').innerHTML = html;
+  document.documentElement.classList.add('modal-open');
   modal.showModal();
 }
 
@@ -280,6 +281,7 @@ function closeModal() {
   modalCleanup = null;
   if (modal.open) modal.close();
   $('#modal-body').innerHTML = '';
+  document.documentElement.classList.remove('modal-open', 'qr-preview-open');
 }
 
 modal.addEventListener('cancel', (event) => { event.preventDefault(); closeModal(); });
@@ -459,40 +461,88 @@ async function fetchIndividualQr(eventId, registrationId) {
   };
 }
 
-async function viewQr(eventId, registrationId) {
-  const popup = window.open('', '_blank');
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+}
+
+async function showQrPreview(eventId, registration, { onBack } = {}) {
+  const manager = $('#qr-manager');
+  const preview = $('#qr-preview') ?? $('#modal-body');
+  const previousModalScroll = modal.scrollTop;
+  if (manager) manager.hidden = true;
+  modal.scrollTop = 0;
+  preview.hidden = false;
+  preview.classList.add('qr-preview');
+  preview.innerHTML = '<p class="muted empty">Generating QR code…</p>';
+  document.documentElement.classList.add('qr-preview-open');
+  let url;
   try {
-    const { blob } = await fetchIndividualQr(eventId, registrationId);
-    const url = URL.createObjectURL(blob);
-    if (popup) {
-      popup.location.href = url;
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } else {
+    const { blob, filename } = await fetchIndividualQr(eventId, registration.id);
+    url = URL.createObjectURL(blob);
+    preview.innerHTML = `
+      <div class="modal-head"><h2>${escapeHtml(registration.name)}</h2><button type="button" class="btn small" data-close>Close</button></div>
+      <img class="qr-preview-image" src="${url}" alt="QR code for ${escapeHtml(registration.name)}">
+      <div class="modal-actions qr-preview-actions">
+        ${onBack ? '<button type="button" class="btn" id="qr-back">Back</button>' : ''}
+        <button type="button" class="btn" id="qr-print">Print</button>
+        <button type="button" class="btn primary" id="qr-download">Download</button>
+      </div>`;
+    $('#qr-download').addEventListener('click', () => saveBlob(blob, filename));
+    $('#qr-print').addEventListener('click', () => window.print());
+    if (onBack) $('#qr-back').addEventListener('click', () => {
       URL.revokeObjectURL(url);
-      throw new Error('Allow pop-ups to view and print the QR code.');
-    }
+      url = null;
+      preview.hidden = true;
+      preview.classList.remove('qr-preview');
+      preview.innerHTML = '';
+      manager.hidden = false;
+      document.documentElement.classList.remove('qr-preview-open');
+      onBack();
+      requestAnimationFrame(() => { modal.scrollTop = previousModalScroll; });
+    });
+    const previousCleanup = modalCleanup;
+    modalCleanup = () => {
+      if (url) URL.revokeObjectURL(url);
+      previousCleanup?.();
+    };
   } catch (error) {
-    popup?.close();
+    document.documentElement.classList.remove('qr-preview-open');
+    if (manager) manager.hidden = false;
+    preview.hidden = Boolean(manager);
+    preview.classList.remove('qr-preview');
+    preview.innerHTML = '';
     throw error;
   }
 }
 
-async function downloadQr(eventId, registrationId, button) {
-  button.disabled = true;
+async function findQrRegistration(attendeeId) {
+  const { events } = await api('/api/admin/qr-events');
+  for (const event of events) {
+    const result = await api(`/api/admin/events/${event.id}/qr-registrations`);
+    const registration = result.registrations.find((item) => item.attendee_id === attendeeId);
+    if (registration) return { event, registration };
+  }
+  throw new Error('This attendee is not registered for an event.');
+}
+
+async function openIndividualQr(attendeeId) {
+  openModal('<p class="muted empty">Loading QR code…</p>');
   try {
-    const { blob, filename } = await fetchIndividualQr(eventId, registrationId);
-    const url = URL.createObjectURL(blob);
-    const link = Object.assign(document.createElement('a'), { href: url, download: filename });
-    document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
-  } finally {
-    button.disabled = false;
+    const { event, registration } = await findQrRegistration(attendeeId);
+    await showQrPreview(event.id, registration);
+  } catch (error) {
+    closeModal();
+    throw error;
   }
 }
 
-async function openQrs(attendeeId = '') {
+async function openQrs() {
   const { events } = await api('/api/admin/qr-events');
   if (!events.length) throw new Error('Create an event before generating QR codes.');
   openModal(`
+    <div id="qr-manager">
     <div class="modal-head"><h2>QR codes</h2><button type="button" class="btn small" data-close>Close</button></div>
     <div class="field">
       <label for="qr-event">Event</label>
@@ -514,7 +564,9 @@ async function openQrs(attendeeId = '') {
       <button type="button" class="btn" data-close>Cancel</button>
       <button type="button" class="btn" id="generate-all" data-default-label="Download all">Download all</button>
       <button type="button" class="btn primary" id="generate-qrs" data-default-label="Download selected">Download selected</button>
-    </div>`);
+    </div>
+    </div>
+    <section id="qr-preview" hidden></section>`);
   let registrations = [];
   const selected = new Set();
 
@@ -529,7 +581,7 @@ async function openQrs(attendeeId = '') {
         <label><input type="checkbox" value="${escapeHtml(item.id)}" ${selected.has(item.id) ? 'checked' : ''}>
         <span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.company)}</small></span>
         </label>
-        <span class="row-actions"><button type="button" class="btn small" data-view-qr="${escapeHtml(item.id)}">View / print</button><button type="button" class="btn small" data-download-qr="${escapeHtml(item.id)}">Download</button></span>
+        <span class="row-actions"><button type="button" class="btn small" data-view-qr="${escapeHtml(item.id)}">View / download</button></span>
       </div>`).join('') : '<p class="muted empty">No attendees match.</p>';
     $('#qr-selected-count').textContent = `${selected.size} selected`;
     $('#qr-select-visible').checked = visible.length > 0 && visible.every((item) => selected.has(item.id));
@@ -538,10 +590,10 @@ async function openQrs(attendeeId = '') {
       if (input.checked) selected.add(input.value); else selected.delete(input.value);
       renderChoices();
     }));
-    $('#qr-selection').querySelectorAll('[data-view-qr]').forEach((button) => button.addEventListener('click', () =>
-      guarded(() => viewQr($('#qr-event').value, button.dataset.viewQr))));
-    $('#qr-selection').querySelectorAll('[data-download-qr]').forEach((button) => button.addEventListener('click', () =>
-      guarded(() => downloadQr($('#qr-event').value, button.dataset.downloadQr, button))));
+    $('#qr-selection').querySelectorAll('[data-view-qr]').forEach((button) => button.addEventListener('click', () => {
+      const registration = registrations.find((item) => item.id === button.dataset.viewQr);
+      if (registration) guarded(() => showQrPreview($('#qr-event').value, registration, { onBack: () => {} }));
+    }));
   };
 
   const loadChoices = async () => {
@@ -549,8 +601,6 @@ async function openQrs(attendeeId = '') {
     $('#qr-selection').innerHTML = '<p class="muted empty">Loading attendees…</p>';
     const result = await api(`/api/admin/events/${$('#qr-event').value}/qr-registrations`);
     registrations = result.registrations;
-    const requested = registrations.find((item) => item.attendee_id === attendeeId);
-    if (requested) selected.add(requested.id);
     renderChoices();
   };
 
@@ -602,7 +652,7 @@ document.addEventListener('click', (event) => {
     view[d.chipGroup] = d.chipValue;
     renderTab({ animate: true });
   } else if ('qrs' in d) guarded(() => openQrs());
-  else if (d.qr) guarded(() => openQrs(d.qr));
+  else if (d.qr) guarded(() => openIndividualQr(d.qr));
   else if (d.edit) openEdit(d.edit);
   else if (d.delete) confirmDelete(d.delete);
   else if (d.approve) guarded(async () => {

@@ -718,9 +718,9 @@ fieldset.field-invalid .radios label { border-color: var(--danger-fill); box-sha
 .qr-choice { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .qr-choice:last-child { border-bottom: 0; }
 .qr-choice:hover { background: var(--info-soft); }
-.qr-choice > label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; cursor: pointer; }
+.qr-choice > label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
 .qr-choice > label > span { display: grid; min-width: 0; }
-.qr-choice strong, .qr-choice small { overflow-wrap: anywhere; }
+.qr-choice strong, .qr-choice small { overflow-wrap: break-word; word-break: normal; }
 .qr-choice small { color: var(--muted); }
 .chip {
   border: 1px solid var(--border);
@@ -898,6 +898,7 @@ td { font-variant-numeric: tabular-nums; }
 
 /* ---------- Dialog ---------- */
 
+html.modal-open, html.modal-open body { overflow: hidden; overscroll-behavior: none; }
 dialog {
   border: 1px solid var(--line);
   padding: 26px;
@@ -914,6 +915,9 @@ dialog::backdrop { background: rgba(0, 43, 97, 0.35); backdrop-filter: blur(4px)
 .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
 .modal-head h2 { margin: 0; }
 .modal-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.qr-preview { text-align: center; }
+.qr-preview .modal-head { text-align: left; }
+.qr-preview-image { display: block; width: min(100%, 420px); height: auto; margin: 10px auto; }
 
 /* ---------- Registree popup (who holds the seats of a full organisation) ---------- */
 
@@ -984,6 +988,10 @@ dialog::backdrop { background: rgba(0, 43, 97, 0.35); backdrop-filter: blur(4px)
   .donut-box { height: 170px; }
   .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tabs button { padding: 9px 8px; }
+  dialog { width: calc(100vw - 24px); padding: 20px; }
+  .qr-choice { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  .qr-choice .row-actions { margin-left: 28px; flex-wrap: wrap; }
+  .qr-choice .row-actions .btn { flex: 1 1 110px; }
   .org-row { grid-template-columns: 1fr auto; }
   .org-row > .org-name { grid-column: 1; grid-row: 1; }
   .org-row > .icon-btn { grid-column: 2; grid-row: 1; }
@@ -996,6 +1004,23 @@ dialog::backdrop { background: rgba(0, 43, 97, 0.35); backdrop-filter: blur(4px)
   .verify-header { padding-inline: 14px; }
   .verify-header .brand-logo.primark { width: 70px; }
   .verify-card { padding: 22px 16px; border-radius: 17px; }
+}
+
+@media print {
+  html.qr-preview-open body > :not(dialog) { display: none !important; }
+  html.qr-preview-open dialog[open] {
+    position: static;
+    display: block;
+    width: 100%;
+    max-height: none;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+  }
+  html.qr-preview-open dialog::backdrop,
+  html.qr-preview-open .qr-preview .modal-head,
+  html.qr-preview-open .qr-preview-actions { display: none !important; }
+  html.qr-preview-open .qr-preview-image { width: 120mm; margin: 20mm auto 0; }
 }
 
 @media (max-width: 400px) {
