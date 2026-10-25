@@ -35,6 +35,8 @@ export function fakeDb({ rpc = {}, tables = {} } = {}) {
       const request = {
         select: () => request,
         eq: () => request,
+        or: () => request,
+        limit: () => request,
         not: () => request,
         order: () => request,
         in: () => request,

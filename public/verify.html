@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#002b61">
+  <title>Attendee verification – Primark Carton Nomination Program</title>
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/js/verify-profile.js"></script>
+</head>
+<body class="verify-body">
+  <header class="verify-header">
+    <span class="logo-chip"><img class="brand-logo pacd" src="/brand/pacd.png" alt="PAC-D"></span>
+    <div class="verify-heading">
+      <span>Primark Carton Nomination Program</span>
+      <strong>Attendee verification</strong>
+    </div>
+    <img class="brand-logo primark" src="/brand/primark.png" alt="Primark">
+  </header>
+
+  <main class="verify-page">
+    <section id="profile-loading" class="verify-card" aria-live="polite">
+      <span class="verify-spinner" aria-hidden="true"></span>
+      <h1>Verifying attendee</h1>
+      <p>Please wait while the registration is checked.</p>
+    </section>
+
+    <section id="profile-result" class="verify-card" hidden>
+      <div class="verified-pill"><span aria-hidden="true">✓</span> Verified registration</div>
+      <div class="verify-photo-wrap">
+        <img id="profile-photo" class="verify-photo" alt="" hidden>
+        <div id="profile-initials" class="verify-photo verify-photo-placeholder" aria-hidden="true"></div>
+      </div>
+      <h1 id="profile-name"></h1>
+      <p id="profile-role" class="verify-role"></p>
+
+      <dl class="verify-details">
+        <div><dt>Company / organisation</dt><dd id="profile-company"></dd></div>
+        <div><dt>Email</dt><dd><a id="profile-email"></a></dd></div>
+        <div><dt>Attendee type</dt><dd id="profile-type"></dd></div>
+        <div><dt>Event</dt><dd id="profile-event"></dd></div>
+      </dl>
+
+      <p class="verify-note"><span aria-hidden="true">ⓘ</span> Viewing this profile does not record attendance.</p>
+    </section>
+
+    <section id="profile-error" class="verify-card verify-error" role="alert" hidden>
+      <div class="verify-error-mark" aria-hidden="true">!</div>
+      <h1>Unable to verify attendee</h1>
+      <p id="profile-error-message">This QR code is invalid or no longer active.</p>
+    </section>
+  </main>
+</body>
+</html>

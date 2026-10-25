@@ -20,6 +20,10 @@ const protectedRoutes = [
   ['put', `/api/admin/participants/${PERSON_ID}`],
   ['delete', `/api/admin/participants/${PERSON_ID}`],
   ['get', `/api/admin/participants/${PERSON_ID}/photo`],
+  ['get', '/api/admin/attendance-days'],
+  ['get', `/api/admin/attendance?event_day_id=${PERSON_ID}`],
+  ['get', `/api/admin/attendance/export?event_day_id=${PERSON_ID}`],
+  ['post', '/api/admin/attendance/check-in'],
   ['post', '/api/admin/organisations/1/approve'],
   ['post', '/api/admin/organisations/1/merge'],
 ];
@@ -71,6 +75,36 @@ test('logout clears the cookie even without a session', async () => {
   const res = await request(appWith(fakeDb())).post('/api/admin/logout');
   assert.equal(res.status, 200);
   assert.match(res.headers['set-cookie'][0], /^admin_session=;/);
+});
+
+test('POST /attendance/check-in validates, hashes, and records a scan', async () => {
+  const db = fakeDb({ rpc: { check_in_registration: () => ({ data: { status: 'CHECKED_IN', name: 'Amina' }, error: null }) } });
+  const invalid = await request(appWith(db)).post('/api/admin/attendance/check-in').set('Cookie', validCookie()).send({});
+  assert.equal(invalid.status, 400);
+  assert.equal(db.calls.some((call) => call.fn === 'check_in_registration'), false);
+
+  const scanId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const dayId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const valid = await request(appWith(db)).post('/api/admin/attendance/check-in').set('Cookie', validCookie()).send({
+    credential: 'ER1.test-credential', event_day_id: dayId, scan_id: scanId,
+    device_id: 'android-test', scanned_at_device: '2026-11-04T04:00:00Z',
+  });
+  assert.equal(valid.status, 200);
+  assert.equal(valid.body.status, 'CHECKED_IN');
+  const rpc = db.calls.find((call) => call.fn === 'check_in_registration');
+  assert.equal(rpc.args.p_credential_hash.length, 64);
+  assert.equal(rpc.args.p_source, 'online');
+});
+
+test('GET /attendance-days returns scanner choices without caching', async () => {
+  const db = fakeDb({ tables: { event_days: { data: [{
+    id: PERSON_ID, event_id: PERSON_ID, event_date: '2026-11-04', label: 'Day 1',
+    events: { id: PERSON_ID, code: 'demo', name: 'Demo', status: 'open', timezone: 'Asia/Dhaka' },
+  }], error: null } } });
+  const res = await request(appWith(db)).get('/api/admin/attendance-days').set('Cookie', validCookie());
+  assert.equal(res.status, 200);
+  assert.equal(res.headers['cache-control'], 'no-store');
+  assert.equal(res.body.days[0].scan_enabled, true);
 });
 
 test('PUT /participants/:id validates the body and calls update_attendee', async () => {

@@ -8,6 +8,9 @@ import { errors } from '../errors.js';
 import { loadDashboard } from '../services/dashboard.js';
 import { buildWorkbook, exportFilename } from '../services/export.js';
 import { PHOTO_BUCKET, photoContentType } from '../services/photo.js';
+import {
+  attendanceFilename, buildAttendanceWorkbook, checkIn, listAttendanceDays, loadAttendance,
+} from '../services/attendance.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -67,6 +70,34 @@ export function adminRoutes({ db, config, loginDelayMs }) {
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="${exportFilename(new Date(data.generated_at))}"`,
+      'Cache-Control': 'no-store',
+    });
+    res.send(Buffer.from(buffer));
+  });
+
+  router.get('/attendance-days', async (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ days: await listAttendanceDays(db) });
+  });
+
+  router.post('/attendance/check-in', async (req, res) => {
+    const result = await checkIn(db, req.body);
+    res.set('Cache-Control', 'no-store');
+    res.json(result);
+  });
+
+  router.get('/attendance', async (req, res) => {
+    const data = await loadAttendance(db, req.query.event_day_id);
+    res.set('Cache-Control', 'no-store');
+    res.json(data);
+  });
+
+  router.get('/attendance/export', async (req, res) => {
+    const data = await loadAttendance(db, req.query.event_day_id);
+    const buffer = await buildAttendanceWorkbook(data).xlsx.writeBuffer();
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${attendanceFilename(data)}"`,
       'Cache-Control': 'no-store',
     });
     res.send(Buffer.from(buffer));

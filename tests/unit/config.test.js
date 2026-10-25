@@ -21,6 +21,8 @@ test('returns a config object when every variable is set', () => {
     powerAutomateWebhookUrl: '',
     isProduction: false,
     maintenanceMode: false,
+    httpsKeyPath: '',
+    httpsCertPath: '',
   });
 });
 
@@ -53,4 +55,11 @@ test('parses MAINTENANCE_MODE as a boolean flag', () => {
     assert.equal(loadConfig({ ...valid, MAINTENANCE_MODE: value }).maintenanceMode, false, `MAINTENANCE_MODE=${value}`);
   }
   assert.equal(loadConfig(valid).maintenanceMode, false);
+});
+
+test('local HTTPS key and certificate must be configured together', () => {
+  assert.throws(() => loadConfig({ ...valid, HTTPS_KEY_PATH: 'key.pem' }), /must be set together/);
+  const config = loadConfig({ ...valid, HTTPS_KEY_PATH: ' key.pem ', HTTPS_CERT_PATH: ' cert.pem ' });
+  assert.equal(config.httpsKeyPath, 'key.pem');
+  assert.equal(config.httpsCertPath, 'cert.pem');
 });

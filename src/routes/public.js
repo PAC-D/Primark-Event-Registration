@@ -4,6 +4,8 @@ import { validateRegistration } from '../../public/shared/validate.js';
 import { callRpc, runQuery } from '../db.js';
 import { errors } from '../errors.js';
 import { notifyRegistration, registrationConfirmation } from '../services/notify.js';
+import { PHOTO_BUCKET, photoContentType } from '../services/photo.js';
+import { loadPublicProfile } from '../services/public-profile.js';
 
 export function publicRoutes({ db, config }) {
   const router = Router();
@@ -32,6 +34,26 @@ export function publicRoutes({ db, config }) {
     }
     res.set('Cache-Control', 'no-store');
     res.json({ event_title: config.eventTitle, organisations });
+  });
+
+  router.post('/attendee-profile', async (req, res) => {
+    const result = await loadPublicProfile(db, req.body?.credential);
+    if (!result) throw errors.notFound('This attendee QR code is invalid or no longer active.');
+    res.set('Cache-Control', 'no-store');
+    res.json(result.profile);
+  });
+
+  router.post('/attendee-profile/photo', async (req, res) => {
+    const result = await loadPublicProfile(db, req.body?.credential);
+    if (!result?.photoPath) throw errors.notFound('No attendee photo is available.');
+    const { data, error } = await db.storage.from(PHOTO_BUCKET).download(result.photoPath);
+    if (error || !data) throw errors.notFound('No attendee photo is available.');
+    res.set({
+      'Content-Type': photoContentType(result.photoPath),
+      'Cache-Control': 'no-store',
+      'Content-Disposition': 'inline',
+    });
+    res.send(Buffer.from(await data.arrayBuffer()));
   });
 
   router.post('/register', async (req, res) => {

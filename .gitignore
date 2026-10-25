@@ -7,3 +7,7 @@ node_modules/
 *.log
 .claude/
 docs/
+backups/
+db-*.sql
+supabase/.temp/
+.demo/

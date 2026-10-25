@@ -12,10 +12,16 @@ const STATUS = { missing: 'Missing', registered: 'Registered', full: 'Full' };
 
 const view = { tab: 'participants', search: '', side: 'all', status: 'all' };
 let data = null;
+let attendanceDays = null;
+let attendanceData = null;
+let attendanceDayId = '';
 let modalCleanup = null;
 
 const formatTime = (iso) => new Date(iso).toLocaleString('en-GB', {
   timeZone: EVENT_TIME_ZONE, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+});
+const formatEventDate = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', {
+  timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric',
 });
 
 // ---------- screens ----------
@@ -41,7 +47,8 @@ async function loadData() {
   $('#updated-at').textContent = `Updated ${formatTime(data.generated_at)}`;
   renderTiles();
   renderCharts(data, { onCoverageClick: showCoverage });
-  renderTab({ animate: true });
+  if (view.tab === 'attendance') await loadAttendanceTab();
+  else renderTab({ animate: true });
 }
 
 // A chart slice or legend "View" opens the Suppliers/Factories tab filtered to that status.
@@ -175,6 +182,45 @@ function renderPending() {
   );
 }
 
+function renderAttendance() {
+  if (!attendanceDays) return '<p class="muted empty">Loading attendance…</p>';
+  if (!attendanceDays.length) return '<p class="muted empty">No event days exist yet.</p>';
+  if (!attendanceData) return '<p class="muted empty">Loading attendance…</p>';
+  const query = view.search.trim().toLocaleLowerCase();
+  const rows = attendanceData.rows.filter((row) => !query ||
+    [row.name, row.designation, row.organisation, row.attendance_status, row.registration_status]
+      .some((value) => String(value ?? '').toLocaleLowerCase().includes(query)));
+  const s = attendanceData.summary;
+  return `<div class="attendance-summary">
+    <div class="attendance-stat"><span class="muted">Registered</span><strong>${s.registered}</strong></div>
+    <div class="attendance-stat"><span class="muted">Present</span><strong>${s.present}</strong></div>
+    <div class="attendance-stat"><span class="muted">Pending</span><strong>${s.pending}</strong></div>
+    ${s.inactive ? `<div class="attendance-stat"><span class="muted">Inactive</span><strong>${s.inactive}</strong></div>` : ''}
+  </div>${table(
+    ['Name', 'Designation', 'Organisation', 'Registration', 'Attendance', 'First check-in', 'Scanner'],
+    rows.map((row) => [
+      escapeHtml(row.name), escapeHtml(row.designation || '—'), escapeHtml(row.organisation),
+      `<span class="badge ${escapeHtml(row.registration_status)}">${escapeHtml(row.registration_status)}</span>`,
+      `<span class="badge ${escapeHtml(row.attendance_status)}">${row.attendance_status === 'present' ? 'Present' : 'Pending'}</span>`,
+      row.checked_in_at ? formatTime(row.checked_in_at) : '—', escapeHtml(row.device_id || '—'),
+    ]),
+    'No attendees match.',
+  )}`;
+}
+
+async function loadAttendanceTab() {
+  attendanceData = null;
+  renderTab();
+  if (!attendanceDays) attendanceDays = (await api('/api/admin/attendance-days')).days;
+  if (!attendanceDays.length) { renderTab({ animate: true }); return; }
+  if (!attendanceDays.some((day) => day.id === attendanceDayId)) {
+    attendanceDayId = (attendanceDays.find((day) => day.scan_enabled) ?? attendanceDays[0]).id;
+  }
+  renderChips();
+  attendanceData = await api(`/api/admin/attendance?event_day_id=${encodeURIComponent(attendanceDayId)}`);
+  renderTab({ animate: true });
+}
+
 function renderChips() {
   const chip = (group, value, label) =>
     `<button type="button" class="chip" data-chip-group="${group}" data-chip-value="${value}" aria-pressed="${view[group] === value}">${label}</button>`;
@@ -183,13 +229,22 @@ function renderChips() {
     chips = [['all', 'All'], ['supplier', 'From supplier'], ['factory', 'From factory'], ['other', 'From other']].map(([v, l]) => chip('side', v, l));
   } else if (view.tab === 'supplier' || view.tab === 'factory') {
     chips = [['all', 'All'], ['missing', 'Missing'], ['registered', 'Registered'], ['full', 'Full']].map(([v, l]) => chip('status', v, l));
+  } else if (view.tab === 'attendance' && attendanceDays?.length) {
+    chips = [`<div class="attendance-controls">
+      <label class="attendance-day-field" for="attendance-day"><span>Event day</span><select id="attendance-day">
+      ${attendanceDays.map((day) => `<option value="${escapeHtml(day.id)}" ${day.id === attendanceDayId ? 'selected' : ''}>${escapeHtml(day.event.name)} · ${escapeHtml(day.label)} · ${formatEventDate(day.event_date)}</option>`).join('')}
+      </select></label>
+      <button type="button" class="btn attendance-export" data-attendance-export>Export attendance</button>
+    </div>`];
   }
+  $('#chips').classList.toggle('attendance-filters', view.tab === 'attendance');
   $('#chips').innerHTML = chips.join('');
 }
 
 function renderTabContent() {
   if (view.tab === 'participants') return renderParticipants();
   if (view.tab === 'pending') return renderPending();
+  if (view.tab === 'attendance') return renderAttendance();
   return renderOrganisations(view.tab);
 }
 
@@ -199,6 +254,7 @@ function renderTab({ animate = false } = {}) {
     button.setAttribute('aria-selected', String(button.dataset.tab === view.tab));
   });
   renderChips();
+  $('#search').placeholder = view.tab === 'attendance' ? 'Search attendees…' : 'Search…';
   const tableWrap = $('#table');
   tableWrap.classList.remove('tab-enter');
   tableWrap.innerHTML = renderTabContent();
@@ -356,6 +412,21 @@ async function exportExcel() {
   URL.revokeObjectURL(url);
 }
 
+async function exportAttendance() {
+  if (!attendanceDayId) throw new Error('Choose an event day.');
+  const res = await fetch(`/api/admin/attendance/export?event_day_id=${encodeURIComponent(attendanceDayId)}`, { credentials: 'same-origin' });
+  if (res.status === 401) throw Object.assign(new Error('Please log in again.'), { status: 401 });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || 'Attendance export failed.');
+  }
+  const blob = await res.blob();
+  const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'attendance.xlsx';
+  const url = URL.createObjectURL(blob);
+  const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+}
+
 // ---------- events ----------
 
 document.addEventListener('click', (event) => {
@@ -364,7 +435,8 @@ document.addEventListener('click', (event) => {
   const d = button.dataset;
   if (d.tab) {
     Object.assign(view, { tab: d.tab, side: 'all', status: 'all' });
-    renderTab({ animate: true });
+    if (d.tab === 'attendance') guarded(loadAttendanceTab);
+    else renderTab({ animate: true });
   } else if (d.chipGroup) {
     view[d.chipGroup] = d.chipValue;
     renderTab({ animate: true });
@@ -375,7 +447,14 @@ document.addEventListener('click', (event) => {
     await loadData();
   });
   else if (d.merge) openMerge(d.merge);
+  else if ('attendanceExport' in d) guarded(exportAttendance);
   else if ('close' in d) closeModal();
+});
+
+document.addEventListener('change', (event) => {
+  if (event.target.id !== 'attendance-day') return;
+  attendanceDayId = event.target.value;
+  guarded(loadAttendanceTab);
 });
 
 $('#search').addEventListener('input', (event) => {
@@ -406,6 +485,8 @@ $('#export').addEventListener('click', () => guarded(exportExcel));
 $('#logout').addEventListener('click', async () => {
   await api('/api/admin/logout', { method: 'POST' }).catch(() => {});
   data = null;
+  attendanceDays = null;
+  attendanceData = null;
   showLogin();
 });
 

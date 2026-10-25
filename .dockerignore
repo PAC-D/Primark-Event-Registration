@@ -13,3 +13,5 @@ vercel.json
 Dockerfile
 .dockerignore
 *.md
+backups
+db-*.sql

@@ -57,6 +57,77 @@ test('a full organisation lists its seat-holders (name and designation only)', a
   assert.equal('registrants' in aspire, false, 'an organisation with seats left exposes nothing');
 });
 
+test('a public QR profile returns verified attendee details without recording attendance', async () => {
+  const db = fakeDb({
+    tables: {
+      registration_credentials: { data: [{ registration_id: 'registration-1', status: 'active' }], error: null },
+      event_registrations: { data: [{
+        id: 'registration-1',
+        status: 'confirmed',
+        attendees: {
+          id: 'attendee-1', name: 'Amina Rahman', email: 'amina@example.com', designation: 'Merchandiser',
+          from_type: 'supplier', organisation_name: null, photo_path: 'person.png',
+        },
+        events: { name: 'Carton Nomination Program', subtitle: 'Bangladesh Origin' },
+        registration_orgs: [{ kind: 'supplier', name: 'Example Supplier' }],
+      }], error: null },
+    },
+  });
+  const res = await request(appWith(db)).post('/api/attendee-profile').send({ credential: 'ER1.public-test-token' });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers['cache-control'], 'no-store');
+  assert.deepEqual(res.body, {
+    name: 'Amina Rahman',
+    email: 'amina@example.com',
+    designation: 'Merchandiser',
+    attendee_type: 'supplier',
+    organisation: 'Example Supplier',
+    event: 'Carton Nomination Program',
+    event_subtitle: 'Bangladesh Origin',
+    has_photo: true,
+  });
+  assert.equal(db.calls.some((call) => call.fn === 'check_in_registration'), false);
+  assert.equal(db.calls.some((call) => call.table === 'attendance'), false);
+});
+
+test('the public QR photo endpoint re-verifies the credential and streams the private photo', async () => {
+  const db = fakeDb({
+    tables: {
+      registration_credentials: { data: [{ registration_id: 'registration-1', status: 'active' }], error: null },
+      event_registrations: { data: [{
+        id: 'registration-1', status: 'confirmed',
+        attendees: { name: 'Amina', email: '', from_type: 'other', photo_path: 'person.png' },
+        events: { name: 'Event' }, registration_orgs: [],
+      }], error: null },
+    },
+  });
+  const res = await request(appWith(db)).post('/api/attendee-profile/photo').send({ credential: 'ER1.public-test-token' });
+  assert.equal(res.status, 200);
+  assert.match(res.headers['content-type'], /^image\/png/);
+  assert.equal(res.headers['cache-control'], 'no-store');
+  assert.equal(db.calls.filter((call) => call.op === 'download' && call.path === 'person.png').length, 1);
+});
+
+test('invalid, unknown, revoked, and cancelled public profile credentials disclose no attendee data', async () => {
+  const invalidDb = fakeDb();
+  const invalid = await request(appWith(invalidDb)).post('/api/attendee-profile').send({ credential: 'x' });
+  assert.equal(invalid.status, 400);
+  assert.equal(invalidDb.calls.length, 0);
+
+  for (const tables of [
+    { registration_credentials: { data: [], error: null } },
+    { registration_credentials: { data: [{ registration_id: 'registration-1', status: 'revoked' }], error: null } },
+    {
+      registration_credentials: { data: [{ registration_id: 'registration-1', status: 'active' }], error: null },
+      event_registrations: { data: [{ status: 'cancelled', attendees: { name: 'Hidden' } }], error: null },
+    },
+  ]) {
+    const res = await request(appWith(fakeDb({ tables }))).post('/api/attendee-profile').send({ credential: 'ER1.public-test-token' });
+    assert.equal(res.status, 404);
+    assert.equal(JSON.stringify(res.body).includes('Hidden'), false);
+  }
+});
+
 test('POST /api/register saves the validated payload and returns 201', async () => {
   const db = fakeDb({ rpc: { register_attendee: () => ({ data: 'new-id', error: null }) } });
   const res = await request(appWith(db)).post('/api/register').send(body());
