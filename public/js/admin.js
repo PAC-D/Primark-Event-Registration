@@ -228,7 +228,6 @@ function renderChips() {
   let chips = [];
   if (view.tab === 'participants') {
     chips = [['all', 'All'], ['supplier', 'From supplier'], ['factory', 'From factory'], ['other', 'From other']].map(([v, l]) => chip('side', v, l));
-    chips.push('<button type="button" class="btn primary" data-qrs>QR codes</button>');
   } else if (view.tab === 'supplier' || view.tab === 'factory') {
     chips = [['all', 'All'], ['missing', 'Missing'], ['registered', 'Registered'], ['full', 'Full']].map(([v, l]) => chip('status', v, l));
   } else if (view.tab === 'attendance' && attendanceDays?.length) {
