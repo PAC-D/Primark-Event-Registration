@@ -713,6 +713,15 @@ fieldset.field-invalid .radios label { border-color: var(--danger-fill); box-sha
   box-shadow: var(--shadow-xs), var(--focus-ring);
 }
 .attendance-export { min-height: 48px; white-space: nowrap; }
+.qr-selection-head { display: flex; justify-content: space-between; gap: 12px; margin: 4px 0 8px; color: var(--ink-2); }
+.qr-selection { max-height: 360px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+.qr-choice { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.qr-choice:last-child { border-bottom: 0; }
+.qr-choice:hover { background: var(--info-soft); }
+.qr-choice > label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; cursor: pointer; }
+.qr-choice > label > span { display: grid; min-width: 0; }
+.qr-choice strong, .qr-choice small { overflow-wrap: anywhere; }
+.qr-choice small { color: var(--muted); }
 .chip {
   border: 1px solid var(--border);
   border-radius: 999px;
