@@ -26,6 +26,27 @@ describe('admin database functions', { skip: skipReason }, () => {
   const reg = (fields) => check(register(db, payload(fields)));
   const pendingOrg = async (matchKey) => (await findOrgs(db, { match_key: matchKey }))[0];
 
+  describe('admin_register_attendee', () => {
+    test('adds factory and supplier attendees after public seat limits are full', async () => {
+      await reg({ email: 'first@example.com', orgs: [pick(o.aspire)] });
+      const publicAttempt = await register(db, payload({ email: 'second@example.com', orgs: [pick(o.aspire)] }));
+      assert.equal(publicAttempt.error.message, 'SEAT_FULL');
+
+      const id = await check(db.rpc('admin_register_attendee', {
+        p: payload({ email: 'second@example.com', orgs: [pick(o.aspire)] }),
+      }));
+      assert.match(id, /^[0-9a-f-]{36}$/);
+      assert.equal((await seats(db, o.aspire.id)).seats_used, 2);
+
+      await reg({ from: 'supplier', email: 'supplier1@example.com', orgs: [pick(o.padma)] });
+      await reg({ from: 'supplier', email: 'supplier2@example.com', orgs: [pick(o.padma)] });
+      await check(db.rpc('admin_register_attendee', {
+        p: payload({ from: 'supplier', email: 'supplier3@example.com', orgs: [pick(o.padma)] }),
+      }));
+      assert.equal((await seats(db, o.padma.id)).seats_used, 3);
+    });
+  });
+
   describe('update_attendee', () => {
     test('does not count the person\'s own seats', async () => {
       const p1 = await reg({ from: 'supplier', email: 'p1@example.com', orgs: [pick(o.padma)] });
@@ -236,6 +257,7 @@ describe('admin database functions', { skip: skipReason }, () => {
     assert.ok((await anon.rpc('approve_org', { p_id: o.padma.id })).error);
     assert.ok((await anon.rpc('merge_org', { p_source: o.windy.id, p_target: o.aspire.id, p_allow_over_limit: true })).error);
     assert.ok((await anon.rpc('update_attendee', { p_id: p, p: payload({ orgs: [pick(o.aspire)] }) })).error);
+    assert.ok((await anon.rpc('admin_register_attendee', { p: payload({ email: 'admin@example.com', orgs: [pick(o.windy)] }) })).error);
     assert.equal((await check(db.from('attendees').select('id'))).length, 1);
   });
 });

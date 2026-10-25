@@ -17,6 +17,7 @@ const rpcError = (message, details = null) => () => ({ data: null, error: { mess
 
 const protectedRoutes = [
   ['get', '/api/admin/data'],
+  ['post', '/api/admin/participants'],
   ['put', `/api/admin/participants/${PERSON_ID}`],
   ['delete', `/api/admin/participants/${PERSON_ID}`],
   ['get', `/api/admin/participants/${PERSON_ID}/photo`],
@@ -121,6 +122,21 @@ test('selected QR downloads reject empty, duplicate, or malformed registration i
     assert.ok(res.body.fields.registration_ids);
   }
   assert.equal(db.calls.length, 0);
+});
+
+test('POST /participants validates and calls the unrestricted admin registration function', async () => {
+  const db = fakeDb({ rpc: { admin_register_attendee: () => ({ data: PERSON_ID, error: null }) } });
+  const app = appWith(db);
+  const bad = await request(app).post('/api/admin/participants').set('Cookie', validCookie()).send({ ...body(), email: 'bad' });
+  assert.equal(bad.status, 400);
+  assert.equal(db.calls.some((call) => call.fn === 'admin_register_attendee'), false);
+
+  const created = await request(app).post('/api/admin/participants').set('Cookie', validCookie()).send(body());
+  assert.equal(created.status, 201);
+  assert.deepEqual(created.body, { id: PERSON_ID });
+  const rpc = db.calls.find((call) => call.fn === 'admin_register_attendee');
+  assert.equal(rpc.args.p.email, 'rahim@example.com');
+  assert.deepEqual(rpc.args.p.orgs, [{ kind: 'supplier', org_id: 1 }]);
 });
 
 test('PUT /participants/:id validates the body and calls update_attendee', async () => {
