@@ -30,7 +30,7 @@ export function validateScan(body = {}) {
 
 export async function checkIn(db, body) {
   const input = validateScan(body);
-  return callRpc(db, 'check_in_registration', {
+  const result = await callRpc(db, 'check_in_registration', {
     p_credential_hash: scannedCredentialHash(input.credential),
     p_event_day_id: input.eventDayId,
     p_scan_id: input.scanId,
@@ -38,6 +38,9 @@ export async function checkIn(db, body) {
     p_scanned_at_device: input.scannedAt,
     p_source: 'online',
   });
+  if (!['CHECKED_IN', 'ALREADY_CHECKED_IN'].includes(result?.status) || !result.attendee_id) return result;
+  const attendees = await runQuery(db.from('attendees').select('email, phone').eq('id', result.attendee_id).limit(1));
+  return { ...result, email: attendees[0]?.email || '', phone: attendees[0]?.phone || '' };
 }
 
 export async function listAttendanceDays(db) {
