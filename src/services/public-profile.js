@@ -12,9 +12,8 @@ export function publicCredential(value) {
   return credential;
 }
 
-function organisation(attendee, snapshots) {
-  const names = snapshots.map((item) => item.name).filter(Boolean);
-  return names.join(', ') || attendee.organisation_name || 'Not provided';
+function organisations(snapshots, kind) {
+  return snapshots.filter((item) => item.kind === kind).map((item) => item.name).filter(Boolean).join(', ');
 }
 
 export async function loadPublicProfile(db, value) {
@@ -28,26 +27,23 @@ export async function loadPublicProfile(db, value) {
 
   const registrations = await runQuery(db.from('event_registrations')
     .select(`id, status,
-      attendees(id, name, email, phone, designation, from_type, organisation_name, photo_path),
-      events(name, subtitle),
+      attendees(id, name, email, designation, from_type, organisation_name, photo_path),
       registration_orgs(kind, name)`)
     .eq('id', credential.registration_id)
     .limit(1));
   const registration = registrations[0];
   const attendee = one(registration?.attendees);
-  const event = one(registration?.events);
   if (!registration || registration.status !== 'confirmed' || !attendee) return null;
 
   return {
     profile: {
       name: attendee.name || 'Unnamed attendee',
       email: attendee.email || '',
-      phone: attendee.phone || '',
       designation: attendee.designation || '',
       attendee_type: attendee.from_type || 'other',
-      organisation: organisation(attendee, registration.registration_orgs ?? []),
-      event: event?.name || '',
-      event_subtitle: event?.subtitle || '',
+      supplier: organisations(registration.registration_orgs ?? [], 'supplier'),
+      factory: organisations(registration.registration_orgs ?? [], 'factory'),
+      organisation_name: attendee.organisation_name || '',
       has_photo: Boolean(attendee.photo_path),
     },
     photoPath: attendee.photo_path || null,

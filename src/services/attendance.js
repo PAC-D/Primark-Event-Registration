@@ -39,8 +39,8 @@ export async function checkIn(db, body) {
     p_source: 'online',
   });
   if (!['CHECKED_IN', 'ALREADY_CHECKED_IN'].includes(result?.status) || !result.attendee_id) return result;
-  const attendees = await runQuery(db.from('attendees').select('email, phone').eq('id', result.attendee_id).limit(1));
-  return { ...result, email: attendees[0]?.email || '', phone: attendees[0]?.phone || '' };
+  const attendees = await runQuery(db.from('attendees').select('email').eq('id', result.attendee_id).limit(1));
+  return { ...result, email: attendees[0]?.email || '' };
 }
 
 export async function listAttendanceDays(db) {
