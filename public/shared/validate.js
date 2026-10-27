@@ -93,3 +93,67 @@ export function validateRegistration(input) {
     },
   };
 }
+
+// Admins may create a placeholder participant and fill in the details later. This deliberately
+// keeps the public registration validator strict: optional values are checked only when present,
+// while organisation IDs and uploaded-photo paths always keep their normal shape validation.
+export function validateAdminParticipant(input) {
+  const src = isObject(input) ? input : {};
+  const fields = {};
+
+  const rawOrgs = Array.isArray(src.orgs) ? src.orgs : [];
+  const orgs = rawOrgs.map((raw, i) => validateOrg(raw, i, fields));
+  const inferredFrom = orgs.find((org) => KINDS.includes(org.kind))?.kind ?? 'other';
+  const from_type = text(src.from_type) || inferredFrom;
+  if (!FROM_TYPES.includes(from_type)) fields.from_type = 'Choose supplier, factory or other.';
+
+  const name = text(src.name);
+  if (name.length > 100) fields.name = 'Enter a name of at most 100 characters.';
+
+  const designation = text(src.designation);
+  if (designation.length > 100) fields.designation = 'Enter a designation of at most 100 characters.';
+
+  const email = text(src.email);
+  if (email && (email.length > 254 || !EMAIL_RE.test(email))) fields.email = 'Enter a valid email address.';
+
+  const phone = text(src.phone);
+  if (phone) {
+    const digits = phone.replace(/\D/g, '').length;
+    if (!PHONE_CHARS_RE.test(phone) || digits < 7 || digits > 15) {
+      fields.phone = 'Enter a phone number with 7–15 digits.';
+    }
+  }
+
+  const photo_path = text(src.photo_path) || null;
+  if (photo_path !== null && !PHOTO_PATH_RE.test(photo_path)) fields.photo = 'Upload the photo again.';
+
+  const organisation_name = text(src.organisation_name);
+  if (organisation_name.length > 150) {
+    fields.organisation_name = 'Enter an organisation name of at most 150 characters.';
+  }
+
+  const count = (kind) => orgs.filter((org) => org.kind === kind).length;
+  for (const kind of KINDS) {
+    if (count(kind) > MAX_ORGS_PER_KIND) {
+      fields[`${kind}s`] = `Select at most ${MAX_ORGS_PER_KIND} ${kind}s.`;
+    }
+  }
+  if (from_type === 'other' && orgs.length) {
+    fields.orgs = 'Other attendees have no supplier or factory.';
+  }
+
+  if (Object.keys(fields).length) return { ok: false, fields };
+  return {
+    ok: true,
+    value: {
+      from_type,
+      name,
+      email,
+      phone,
+      designation,
+      photo_path,
+      organisation_name: from_type === 'other' ? organisation_name : null,
+      orgs,
+    },
+  };
+}

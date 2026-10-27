@@ -77,7 +77,7 @@ src/
   errors.js                  Stable API error mapping
   routes/                    Public, photo, and admin endpoints
   services/                  Dashboard, attendance, export, import, notification, photos
-supabase/migrations/         Ordered migrations 001–013
+supabase/migrations/         Ordered migrations 001–015
 scripts/
   apply-migration.js         Apply named SQL migrations through DATABASE_URL
   import-orgs.js             Organisation import entry point
@@ -230,7 +230,7 @@ Never commit `.env`, secret keys, webhook URLs, database exports, or attendee da
 
 ## Local development
 
-Requirements: Node.js 24, a development Supabase project, and migrations `001–013`.
+Requirements: Node.js 24, a development Supabase project, and migrations `001–015`.
 
 ```bash
 npm install

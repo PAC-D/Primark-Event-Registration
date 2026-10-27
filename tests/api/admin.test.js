@@ -139,7 +139,18 @@ test('POST /participants validates and calls the unrestricted admin registration
   assert.deepEqual(rpc.args.p.orgs, [{ kind: 'supplier', org_id: 1 }]);
 });
 
-test('PUT /participants/:id validates the body and calls update_attendee', async () => {
+test('POST /participants accepts an all-blank admin placeholder', async () => {
+  const db = fakeDb({ rpc: { admin_register_attendee: () => ({ data: PERSON_ID, error: null }) } });
+  const res = await request(appWith(db)).post('/api/admin/participants').set('Cookie', validCookie()).send({});
+  assert.equal(res.status, 201);
+  const rpc = db.calls.find((call) => call.fn === 'admin_register_attendee');
+  assert.deepEqual(rpc.args.p, {
+    from_type: 'other', name: '', designation: '', email: '', phone: '', photo_path: null,
+    organisation_name: '', orgs: [],
+  });
+});
+
+test('PUT /participants/:id validates supplied values and calls update_attendee', async () => {
   const db = fakeDb();
   const app = appWith(db);
   const bad = await request(app).put(`/api/admin/participants/${PERSON_ID}`).set('Cookie', validCookie()).send({ ...body(), phone: 'x' });
@@ -152,6 +163,21 @@ test('PUT /participants/:id validates the body and calls update_attendee', async
   const rpc = db.calls.find((c) => c.fn === 'update_attendee');
   assert.equal(rpc.args.p_id, PERSON_ID);
   assert.equal(rpc.args.p.email, 'rahim@example.com');
+});
+
+test('PUT /participants/:id accepts an all-blank admin placeholder', async () => {
+  const db = fakeDb();
+  const res = await request(appWith(db)).put(`/api/admin/participants/${PERSON_ID}`)
+    .set('Cookie', validCookie()).send({});
+  assert.equal(res.status, 200);
+  const rpc = db.calls.find((call) => call.fn === 'update_attendee');
+  assert.deepEqual(rpc.args, {
+    p_id: PERSON_ID,
+    p: {
+      from_type: 'other', name: '', designation: '', email: '', phone: '', photo_path: null,
+      organisation_name: '', orgs: [],
+    },
+  });
 });
 
 test('a malformed participant id returns 404 without calling the database', async () => {

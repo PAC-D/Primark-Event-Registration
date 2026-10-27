@@ -1,4 +1,4 @@
-import { MAX_ORGS_PER_KIND, validateRegistration } from '/shared/validate.js';
+import { MAX_ORGS_PER_KIND, validateAdminParticipant, validateRegistration } from '/shared/validate.js';
 import { ORGANISATION_OPTIONS, PHOTO_MAX_BYTES } from '/shared/constants.js';
 import { buildPayload, escapeHtml, orderRows, pickerOptions, seatInfo } from '/shared/form-logic.js';
 import { openRegistreeModal } from './registree-modal.js';
@@ -30,10 +30,11 @@ let nextKey = 0;
  *   showSeatStatus false hides public capacity notices in the unrestricted admin-add form
  *   requireFullName false accepts a single-part admin-entered name when otherwise valid
  *   keepOrgPickerOpen true keeps the organisation list open while several are selected
+ *   optionalFields true removes required markers and permits an admin placeholder participant
  */
 export function mountRegistrationForm(container, {
   orgs, initial = null, submitLabel = 'Register', onSubmit, reloadOrgs = null,
-  showSeatStatus = true, requireFullName = true, keepOrgPickerOpen = false,
+  showSeatStatus = true, requireFullName = true, keepOrgPickerOpen = false, optionalFields = false,
 }) {
   const uid = ++nextKey;
   let orgList = orgs;
@@ -59,7 +60,7 @@ export function mountRegistrationForm(container, {
     <form class="reg-form" method="post" novalidate>
       <p class="alert" role="alert" hidden></p>
       <fieldset class="field" data-fieldset="from_type">
-        <legend>Attending from <span class="req">*</span></legend>
+        <legend>Attending from${optionalFields ? '' : ' <span class="req">*</span>'}</legend>
         <div class="radios">
           ${FROM_OPTIONS.map((o) => `<label><input type="radio" name="from_type" value="${o.value}"> ${o.label}</label>`).join('')}
         </div>
@@ -69,7 +70,7 @@ export function mountRegistrationForm(container, {
       <div data-kind-sections>
         ${KINDS.map(({ kind, label, search, errorKey }) => `
           <section class="field org-block">
-            <label data-kind-label="${kind}" for="picker-${kind}-${uid}">${label} <span class="req">*</span></label>
+            <label data-kind-label="${kind}" for="picker-${kind}-${uid}">${label}${optionalFields ? '' : ' <span class="req">*</span>'}</label>
             <select id="picker-${kind}-${uid}" data-picker="${kind}" placeholder="${search}"></select>
             <ul class="org-rows" data-rows="${kind}"></ul>
             <p class="field-error" data-error="${errorKey}"></p>
@@ -77,34 +78,34 @@ export function mountRegistrationForm(container, {
       </div>
 
       <section class="field" data-other-org hidden>
-        <label for="orgname-${uid}">Organization Name <span class="req">*</span></label>
+        <label for="orgname-${uid}">Organization Name${optionalFields ? '' : ' <span class="req">*</span>'}</label>
         <select id="orgname-${uid}" data-org-name>
           <option value="" disabled selected>Choose your organisation…</option>
           ${ORGANISATION_OPTIONS.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
         </select>
-        <input data-field="org_name_custom" maxlength="150" placeholder="Enter your organisation name *" aria-label="Organisation name" hidden>
+        <input data-field="org_name_custom" maxlength="150" placeholder="Enter your organisation name${optionalFields ? '' : ' *'}" aria-label="Organisation name" hidden>
         <p class="field-error" data-error="organisation_name"></p>
       </section>
 
       <section class="sub-card">
         <h3>Attendee information</h3>
         <div class="field">
-          <label for="name-${uid}">Full Name <span class="req">*</span></label>
+          <label for="name-${uid}">Full Name${optionalFields ? '' : ' <span class="req">*</span>'}</label>
           <input id="name-${uid}" name="name" autocomplete="name" maxlength="100">
           <p class="field-error" data-error="name"></p>
         </div>
         <div class="field">
-          <label for="designation-${uid}">Designation <span class="req">*</span></label>
+          <label for="designation-${uid}">Designation${optionalFields ? '' : ' <span class="req">*</span>'}</label>
           <input id="designation-${uid}" name="designation" autocomplete="organization-title" maxlength="100">
           <p class="field-error" data-error="designation"></p>
         </div>
         <div class="field">
-          <label for="email-${uid}">Email <span class="req">*</span></label>
+          <label for="email-${uid}">Email${optionalFields ? '' : ' <span class="req">*</span>'}</label>
           <input id="email-${uid}" name="email" type="email" autocomplete="email" maxlength="254">
           <p class="field-error" data-error="email"></p>
         </div>
         <div class="field">
-          <label for="phone-${uid}">Phone <span class="req">*</span></label>
+          <label for="phone-${uid}">Phone${optionalFields ? '' : ' <span class="req">*</span>'}</label>
           <input id="phone-${uid}" name="phone" type="tel" autocomplete="tel" maxlength="30">
           <p class="field-error" data-error="phone"></p>
         </div>
@@ -294,8 +295,10 @@ export function mountRegistrationForm(container, {
       // (TomSelect rewrites the label's `for`, so target it with data-kind-label instead.)
       const labelEl = form.querySelector(`[data-kind-label="${kind}"]`);
       if (labelEl) {
-        labelEl.innerHTML = !state.fromType || state.fromType === kind
-          ? `${label} <span class="req">*</span>`
+        labelEl.innerHTML = optionalFields
+          ? label
+          : !state.fromType || state.fromType === kind
+            ? `${label} <span class="req">*</span>`
           : `${label} <span class="muted">(optional)</span>`;
       }
 
@@ -412,10 +415,10 @@ export function mountRegistrationForm(container, {
       organisationName: state.fromType === 'other' ? resolvedOrgName() : '',
       photoPath: state.photoFile ? null : (state.keepExistingPhoto ? initial?.photo_path : null),
     });
-    const result = validateRegistration(payload);
+    const result = optionalFields ? validateAdminParticipant(payload) : validateRegistration(payload);
     // Front-end only: a full name is at least two words (the server keeps its own length rule).
     const fields = result.ok ? {} : { ...result.fields };
-    if (requireFullName && !fields.name && payload.name.trim().split(/\s+/).filter(Boolean).length < 2) {
+    if (!optionalFields && requireFullName && !fields.name && payload.name.trim().split(/\s+/).filter(Boolean).length < 2) {
       fields.name = 'Enter your full name.';
     }
     if (Object.keys(fields).length) {
