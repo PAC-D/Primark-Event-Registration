@@ -21,6 +21,7 @@ test('returns a config object when every variable is set', () => {
     powerAutomateWebhookUrl: '',
     isProduction: false,
     maintenanceMode: false,
+    registrationClosed: true,
     httpsKeyPath: '',
     httpsCertPath: '',
   });

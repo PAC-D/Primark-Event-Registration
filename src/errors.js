@@ -20,6 +20,7 @@ export const errors = {
   conflict: (message) => new AppError('CONFLICT', 409, message),
   dbUnavailable: () => new AppError('DB_UNAVAILABLE', 503, 'Service is busy, please try again in a moment.'),
   maintenance: () => new AppError('MAINTENANCE', 503, 'The site is down for scheduled maintenance. Please try again shortly.'),
+  registrationClosed: () => new AppError('REGISTRATION_CLOSED', 403, 'Registration is closed for this event.'),
   internal: (cause) => Object.assign(new AppError('INTERNAL', 500, 'Something went wrong, please try again.'), { cause }),
 };
 

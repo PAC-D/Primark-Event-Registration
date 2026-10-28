@@ -33,8 +33,14 @@ export function createApp({ db, config, loginDelayMs = 1000 }) {
     });
   }
 
-  // Served before express.static so "/" always maps to the registration page on any host.
-  app.get('/', (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
+  // Served before express.static so the landing page always wins on any host.
+  const landingPage = config.registrationClosed ? 'registration-closed.html' : 'index.html';
+  app.get(['/', '/index', '/index.html'], (_req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', landingPage));
+  });
+  if (config.registrationClosed) {
+    app.post('/api/register', (_req, _res, next) => next(errors.registrationClosed()));
+  }
   app.get('/vendor/html5-qrcode.min.js', (_req, res) => {
     res.set('Cache-Control', 'public, max-age=31536000, immutable');
     res.sendFile(path.join(__dirname, '..', 'node_modules', 'html5-qrcode', 'html5-qrcode.min.js'));

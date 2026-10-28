@@ -24,6 +24,8 @@ export function loadConfig(env = process.env) {
     powerAutomateWebhookUrl: (env.POWER_AUTOMATE_WEBHOOK_URL ?? '').trim(),
     isProduction: env.NODE_ENV === 'production' || Boolean(env.VERCEL),
     maintenanceMode: TRUE_FLAGS.has((env.MAINTENANCE_MODE ?? '').trim().toLowerCase()),
+    // Public registration is closed for this event. Reopening is a deliberate code change.
+    registrationClosed: true,
     httpsKeyPath,
     httpsCertPath,
   };
