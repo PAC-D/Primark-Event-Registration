@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateRegistration, MAX_ORGS_PER_KIND } from '../../public/shared/validate.js';
+import { validateAdminParticipant, validateRegistration, MAX_ORGS_PER_KIND } from '../../public/shared/validate.js';
 
 const UUID_PATH = '123e4567-e89b-42d3-a456-426614174000.jpg';
 
@@ -119,4 +119,32 @@ test('"other" attendees need an organisation name of 2–150 chars and no orgs',
   const result = validateRegistration({ ...base(), from_type: 'other', orgs: [], organisation_name: ' WAC - Bangladesh ' });
   assert.equal(result.value.organisation_name, 'WAC - Bangladesh');
   assert.deepEqual(result.value.orgs, []);
+});
+
+test('admin add permits every participant field to be blank without weakening public registration', () => {
+  const admin = validateAdminParticipant({});
+  assert.equal(admin.ok, true);
+  assert.deepEqual(admin.value, {
+    from_type: 'other',
+    name: '',
+    designation: '',
+    email: '',
+    phone: '',
+    photo_path: null,
+    organisation_name: '',
+    orgs: [],
+  });
+  assert.equal(validateRegistration({}).ok, false);
+});
+
+test('admin add validates optional values when supplied and infers a side from an organisation', () => {
+  assert.ok(validateAdminParticipant({ email: 'bad' }).fields.email);
+  assert.ok(validateAdminParticipant({ phone: '123' }).fields.phone);
+  const result = validateAdminParticipant({
+    name: ' A ',
+    orgs: [{ kind: 'factory', org_id: 2 }],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.value.from_type, 'factory');
+  assert.equal(result.value.name, 'A');
 });

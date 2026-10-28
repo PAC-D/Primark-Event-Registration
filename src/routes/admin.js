@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { validateRegistration } from '../../public/shared/validate.js';
+import { validateAdminParticipant } from '../../public/shared/validate.js';
 import {
   COOKIE_NAME, clearCookieOptions, cookieOptions, passwordMatches, requireAdmin, signSession,
 } from '../auth.js';
@@ -183,7 +183,7 @@ export function adminRoutes({ db, config, loginDelayMs }) {
   });
 
   router.post('/participants', async (req, res) => {
-    const result = validateRegistration(req.body);
+    const result = validateAdminParticipant(req.body);
     if (!result.ok) throw errors.validation(result.fields);
     const id = await callRpc(db, 'admin_register_attendee', { p: result.value });
     res.status(201).json({ id });
@@ -191,7 +191,7 @@ export function adminRoutes({ db, config, loginDelayMs }) {
 
   router.put('/participants/:id', async (req, res) => {
     const id = participantId(req.params.id);
-    const result = validateRegistration(req.body);
+    const result = validateAdminParticipant(req.body);
     if (!result.ok) throw errors.validation(result.fields);
     const oldPath = await currentPhotoPath(db, id);
     await callRpc(db, 'update_attendee', { p_id: id, p: result.value });

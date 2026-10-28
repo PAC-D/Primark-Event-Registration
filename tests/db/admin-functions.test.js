@@ -45,6 +45,20 @@ describe('admin database functions', { skip: skipReason }, () => {
       }));
       assert.equal((await seats(db, o.padma.id)).seats_used, 3);
     });
+
+    test('allows more than one completely blank admin placeholder', async () => {
+      const blank = {
+        from_type: 'other', name: '', email: '', phone: '', designation: '',
+        organisation_name: '', photo_path: null, orgs: [],
+      };
+      const first = await check(db.rpc('admin_register_attendee', { p: blank }));
+      const second = await check(db.rpc('admin_register_attendee', { p: blank }));
+      assert.notEqual(first, second);
+      const rows = await check(db.from('attendees').select('name, email, phone, designation, from_type'));
+      assert.equal(rows.length, 2);
+      assert.ok(rows.every((row) => row.from_type === 'other'
+        && row.name === '' && row.email === '' && row.phone === '' && row.designation === ''));
+    });
   });
 
   describe('update_attendee', () => {
@@ -60,19 +74,31 @@ describe('admin database functions', { skip: skipReason }, () => {
       assert.equal((await seats(db, o.padma.id)).seats_used, 2);
     });
 
-    test('switching from_type re-checks seats on the other side (per-kind limits)', async () => {
+    test('switching from_type does not require an organisation on the selected side', async () => {
       const f = await reg({ email: 'f@example.com', orgs: [pick(o.windy)] });
-      const { error } = await db.rpc('update_attendee', {
+      await check(db.rpc('update_attendee', {
         p_id: f,
         p: payload({ from: 'supplier', email: 'f@example.com', orgs: [pick(o.windy)] }),
-      });
-      assert.equal(error.message, 'VALIDATION'); // no supplier selected
-      const { error: seatError } = await db.rpc('update_attendee', {
-        p_id: f,
-        p: payload({ from: 'supplier', email: 'f@example.com', orgs: [pick(o.padma), pick(o.windy)] }),
-      });
-      assert.equal(seatError, null, 'a supplier-side person may cross-link a factory');
+      }));
       assert.deepEqual(await seats(db, o.windy.id), { seats_used: 0, linked_count: 1 });
+    });
+
+    test('allows every editable participant field to be blank', async () => {
+      const p = await reg({ email: 'filled@example.com', orgs: [pick(o.aspire)] });
+      await check(db.rpc('update_attendee', {
+        p_id: p,
+        p: {
+          from_type: 'other', name: '', email: '', phone: '', designation: '',
+          organisation_name: '', photo_path: null, orgs: [],
+        },
+      }));
+      const [row] = await check(db.from('attendees')
+        .select('name, email, phone, designation, from_type, organisation_name, photo_path').eq('id', p));
+      assert.deepEqual(row, {
+        name: '', email: '', phone: '', designation: '', from_type: 'other',
+        organisation_name: '', photo_path: null,
+      });
+      assert.equal((await seats(db, o.aspire.id)).seats_used, 0);
     });
 
     test('rejects another person\'s email with DUPLICATE_EMAIL', async () => {
@@ -113,7 +139,7 @@ describe('admin database functions', { skip: skipReason }, () => {
       assert.equal(error.message, 'NOT_FOUND');
     });
 
-    test('an attendee at an over-limit org (after merge anyway) can still be edited', async () => {
+    test('admin edits may add attendees to an organisation over its public seat limit', async () => {
       const f1 = await reg({ email: 'f1@example.com', orgs: [pick(o.aspire)] });
       const copy = (await seedOrgs(db, {
         copy: { kind: 'factory', name: 'Aspire Copy', status: 'pending', source: 'attendee', code: 'COPY' },
@@ -131,12 +157,11 @@ describe('admin database functions', { skip: skipReason }, () => {
       assert.equal(row.name, 'Renamed');
 
       const f4 = await reg({ from: 'supplier', email: 'f4@example.com', orgs: [pick(o.padma)] });
-      const { error } = await db.rpc('update_attendee', {
+      await check(db.rpc('update_attendee', {
         p_id: f4,
         p: payload({ from: 'factory', email: 'f4@example.com', orgs: [pick(o.padma), pick(o.aspire)] }),
-      });
-      assert.equal(error.message, 'SEAT_FULL');
-      assert.deepEqual(JSON.parse(error.details), { side: 'factory', orgs: ['Aspire Garments (24040)'] });
+      }));
+      assert.equal((await seats(db, o.aspire.id)).seats_used, 3);
     });
 
     test('an attendee can be switched to "other": links removed, seats freed, organisation stored', async () => {

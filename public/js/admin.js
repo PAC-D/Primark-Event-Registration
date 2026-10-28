@@ -313,6 +313,7 @@ function openAddParticipant() {
     showSeatStatus: false,
     requireFullName: false,
     keepOrgPickerOpen: true,
+    optionalFields: true,
     onSubmit: async (payload) => {
       try {
         await api('/api/admin/participants', { method: 'POST', body: payload });
@@ -337,6 +338,10 @@ function openEdit(id) {
     orgs: data.organisations,
     initial: person,
     submitLabel: 'Save changes',
+    showSeatStatus: false,
+    requireFullName: false,
+    keepOrgPickerOpen: true,
+    optionalFields: true,
     onSubmit: async (payload) => {
       try {
         await api(`/api/admin/participants/${id}`, { method: 'PUT', body: payload });
@@ -347,7 +352,6 @@ function openEdit(id) {
       closeModal();
       await refresh();
     },
-    reloadOrgs: async () => (await api('/api/organisations')).organisations,
   });
   modalCleanup = () => form.destroy();
 }
