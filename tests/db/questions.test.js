@@ -185,4 +185,67 @@ describe('session questions', { skip: skipReason }, () => {
     const { error } = await ask(fixture.session.id, 'A real question', 'not-a-hash');
     assert.equal(error?.message, 'VALIDATION');
   });
+  // --- set_live_session / delete_session_question ---
+  // "deleting a pinned session nulls live_session_id" lives in tests/db/schema.test.js, where the
+  // `on delete set null` reference is defined; not duplicated here.
+
+  const liveSessionId = async () => {
+    const [row] = await check(db.from('events').select('live_session_id').eq('id', fixture.event.id));
+    return row.live_session_id;
+  };
+
+  test('set_live_session pins a session on the event', async () => {
+    await check(db.rpc('set_live_session', { p_event_id: fixture.event.id, p_session_id: fixture.session.id }));
+    assert.equal(await liveSessionId(), fixture.session.id);
+  });
+
+  test('set_live_session with a null session returns to the clock', async () => {
+    await check(db.rpc('set_live_session', { p_event_id: fixture.event.id, p_session_id: fixture.session.id }));
+    await check(db.rpc('set_live_session', { p_event_id: fixture.event.id, p_session_id: null }));
+    assert.equal(await liveSessionId(), null);
+  });
+
+  test('set_live_session refuses a session belonging to another event', async () => {
+    const [other] = await check(db.from('events').insert({
+      code: 'live-other', name: 'Live Other', status: 'open',
+    }).select('id'));
+    const [otherSession] = await check(db.from('event_sessions').insert({
+      event_id: other.id, position: 1, title: 'Elsewhere', kind: 'session',
+      starts_at: '2030-01-01T03:30:00Z', ends_at: '2030-01-01T04:00:00Z',
+    }).select('id'));
+    const { error } = await db.rpc('set_live_session', {
+      p_event_id: fixture.event.id, p_session_id: otherSession.id,
+    });
+    assert.equal(error?.message, 'VALIDATION');
+    assert.equal(await liveSessionId(), null);
+  });
+
+  test('set_live_session refuses a break', async () => {
+    const { error } = await db.rpc('set_live_session', {
+      p_event_id: fixture.event.id, p_session_id: fixture.brk.id,
+    });
+    assert.equal(error?.message, 'VALIDATION');
+    assert.equal(await liveSessionId(), null);
+  });
+
+  test('set_live_session raises NOT_FOUND for an unknown event', async () => {
+    const { error } = await db.rpc('set_live_session', {
+      p_event_id: randomUUID(), p_session_id: fixture.session.id,
+    });
+    assert.equal(error?.message, 'NOT_FOUND');
+  });
+
+  test('delete_session_question removes one question and leaves the rest', async () => {
+    const first = await check(ask(fixture.session.id, 'First question'));
+    await check(backdate(5));
+    await check(ask(fixture.session.id, 'Second question'));
+    await check(db.rpc('delete_session_question', { p_id: first.question_id }));
+    const remaining = await check(db.from('session_questions').select('body'));
+    assert.deepEqual(remaining.map((row) => row.body), ['Second question']);
+  });
+
+  test('delete_session_question raises NOT_FOUND when the question is already gone', async () => {
+    const { error } = await db.rpc('delete_session_question', { p_id: randomUUID() });
+    assert.equal(error?.message, 'NOT_FOUND');
+  });
 });

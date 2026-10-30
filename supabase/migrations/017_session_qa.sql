@@ -154,3 +154,49 @@ $$;
 revoke execute on function public.ask_session_question(text, uuid, text)
   from public, anon, authenticated;
 grant execute on function public.ask_session_question(text, uuid, text) to service_role;
+
+-- Sets or clears the live-session override. A function rather than a plain update from Express
+-- because "the session must belong to this event and must not be a break" is a cross-table rule
+-- a CHECK constraint cannot express.
+create or replace function public.set_live_session(
+  p_event_id uuid,
+  p_session_id uuid
+) returns void
+language plpgsql
+set search_path = ''
+as $$
+begin
+  perform 1 from public.events where id = p_event_id for no key update;
+  if not found then
+    raise exception 'NOT_FOUND';
+  end if;
+
+  if p_session_id is not null and not exists (
+    select 1 from public.event_sessions s
+     where s.id = p_session_id
+       and s.event_id = p_event_id
+       and s.kind = 'session'
+  ) then
+    raise exception 'VALIDATION' using detail = 'session';
+  end if;
+
+  update public.events set live_session_id = p_session_id where id = p_event_id;
+end;
+$$;
+
+create or replace function public.delete_session_question(p_id uuid) returns void
+language plpgsql
+set search_path = ''
+as $$
+begin
+  delete from public.session_questions where id = p_id;
+  if not found then
+    raise exception 'NOT_FOUND';
+  end if;
+end;
+$$;
+
+revoke execute on function public.set_live_session(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.set_live_session(uuid, uuid) to service_role;
+revoke execute on function public.delete_session_question(uuid) from public, anon, authenticated;
+grant execute on function public.delete_session_question(uuid) to service_role;
