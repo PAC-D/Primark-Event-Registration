@@ -43,6 +43,21 @@ export async function checkIn(db, body) {
   return { ...result, email: attendees[0]?.email || '' };
 }
 
+// A mis-scan, a test scan during setup, or the wrong card: the row has to be removable so the
+// person returns to Pending and can be scanned again.
+export async function deleteAttendance(db, body = {}) {
+  const registrationId = String(body.registration_id ?? '');
+  const eventDayId = String(body.event_day_id ?? '');
+  const fields = {};
+  if (!UUID_RE.test(registrationId)) fields.registration_id = 'Choose an attendee.';
+  if (!UUID_RE.test(eventDayId)) fields.event_day_id = 'Choose an event day.';
+  if (Object.keys(fields).length) throw errors.validation(fields);
+  await callRpc(db, 'delete_attendance', {
+    p_registration_id: registrationId,
+    p_event_day_id: eventDayId,
+  });
+}
+
 export async function listAttendanceDays(db) {
   const rows = await runQuery(db.from('event_days')
     .select('id, event_id, event_date, label, check_in_opens_at, check_in_closes_at, events(id, code, name, status, timezone)')

@@ -29,6 +29,7 @@ const protectedRoutes = [
   ['get', `/api/admin/attendance?event_day_id=${PERSON_ID}`],
   ['get', `/api/admin/attendance/export?event_day_id=${PERSON_ID}`],
   ['post', '/api/admin/attendance/check-in'],
+  ['delete', '/api/admin/attendance'],
   ['post', '/api/admin/organisations/1/approve'],
   ['post', '/api/admin/organisations/1/merge'],
 ];
@@ -299,4 +300,43 @@ test('GET /participants/:id/photo is 404 without a photo or when the object is g
   db.storage.from = () => ({ download: () => Promise.resolve({ data: null, error: new Error('not found') }) });
   const gone = await request(appWith(db)).get(`/api/admin/participants/${PERSON_ID}/photo`).set('Cookie', validCookie());
   assert.equal(gone.status, 404);
+});
+
+const DAY_ID = '7a1b2c3d-4e5f-4061-8273-849506a7b8c9';
+
+test('DELETE /attendance calls delete_attendance with the registration and day', async () => {
+  const db = fakeDb({ rpc: { delete_attendance: () => ({ data: null, error: null }) } });
+  const res = await request(appWith(db)).delete('/api/admin/attendance')
+    .set('Cookie', validCookie()).send({ registration_id: PERSON_ID, event_day_id: DAY_ID });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { ok: true });
+  assert.deepEqual(
+    db.calls.find((call) => call.fn === 'delete_attendance').args,
+    { p_registration_id: PERSON_ID, p_event_day_id: DAY_ID },
+  );
+});
+
+test('DELETE /attendance rejects ids that are not uuids and never touches the database', async () => {
+  const db = fakeDb();
+  for (const payload of [
+    { registration_id: 'nope', event_day_id: DAY_ID },
+    { registration_id: PERSON_ID, event_day_id: 'nope' },
+    {},
+  ]) {
+    const res = await request(appWith(db)).delete('/api/admin/attendance')
+      .set('Cookie', validCookie()).send(payload);
+    assert.equal(res.status, 400, JSON.stringify(payload));
+    assert.equal(res.body.error, 'VALIDATION');
+  }
+  assert.equal(db.calls.length, 0);
+});
+
+test('DELETE /attendance reports NOT_FOUND when the check-in is already gone', async () => {
+  const db = fakeDb({ rpc: { delete_attendance: rpcError('NOT_FOUND') } });
+  const res = await request(appWith(db)).delete('/api/admin/attendance')
+    .set('Cookie', validCookie()).send({ registration_id: PERSON_ID, event_day_id: DAY_ID });
+  assert.equal(res.status, 404);
+  assert.equal(res.body.error, 'NOT_FOUND');
+  // An unmatched /api path is also a 404 NOT_FOUND, so only the call proves the route ran.
+  assert.ok(db.calls.some((call) => call.fn === 'delete_attendance'));
 });

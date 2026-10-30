@@ -12,7 +12,8 @@ import {
   generateQrPdf, generateQrPng, listQrEvents, listQrRegistrations, qrPdfFilename, qrPngFilename,
 } from '../services/qr.js';
 import {
-  attendanceFilename, buildAttendanceWorkbook, checkIn, listAttendanceDays, loadAttendance,
+  attendanceFilename, buildAttendanceWorkbook, checkIn, deleteAttendance, listAttendanceDays,
+  loadAttendance,
 } from '../services/attendance.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -106,6 +107,11 @@ export function adminRoutes({ db, config, loginDelayMs }) {
     const data = await loadAttendance(db, req.query.event_day_id);
     res.set('Cache-Control', 'no-store');
     res.json(data);
+  });
+
+  router.delete('/attendance', async (req, res) => {
+    await deleteAttendance(db, req.body);
+    res.json({ ok: true });
   });
 
   router.get('/attendance/export', async (req, res) => {
