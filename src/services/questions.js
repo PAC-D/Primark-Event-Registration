@@ -1,10 +1,12 @@
 import ExcelJS from 'exceljs';
+import { runQuery } from '../db.js';
 import { errors } from '../errors.js';
 import { formatDhaka } from './export.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BODY_MIN = 3;
 const BODY_MAX = 10000;
+const INVALID_CARD = 'This attendee QR code is invalid or no longer active.';
 const one = (value) => (Array.isArray(value) ? value[0] : value);
 
 // Breaks are on the agenda so the attendee's list reads like the printed programme, but they
@@ -34,6 +36,68 @@ export function validateQuestion(body = {}) {
   if (length < BODY_MIN || length > BODY_MAX) fields.body = `Write a question of ${BODY_MIN} to ${BODY_MAX} characters.`;
   if (Object.keys(fields).length) throw errors.validation(fields);
   return { credential, sessionId, body: text };
+}
+
+// What the attendee's own verification page needs: the printed programme, which session counts
+// as live right now, and what this person has already asked. Null when the event has no agenda,
+// so the page simply shows no Q&A section.
+export async function loadQa(db, { registrationId, eventId }) {
+  const sessions = await runQuery(db.from('event_sessions')
+    .select('id, position, title, kind, starts_at, ends_at')
+    .eq('event_id', eventId)
+    .order('position'));
+  if (!sessions.length) return null;
+
+  const [events, attendance, asked] = await Promise.all([
+    runQuery(db.from('events').select('live_session_id').eq('id', eventId).limit(1)),
+    // A check-in on any day of the event unlocks every session: Q&A is not day-scoped.
+    runQuery(db.from('attendance')
+      .select('registration_id, event_days!inner(event_id)')
+      .eq('registration_id', registrationId)
+      .eq('event_days.event_id', eventId)
+      .limit(1)),
+    runQuery(db.from('session_questions')
+      .select('id, session_id, body, asked_at, event_sessions(title)')
+      .eq('registration_id', registrationId)
+      .order('asked_at', { ascending: false })),
+  ]);
+
+  return {
+    checked_in: attendance.length > 0,
+    sessions,
+    live_session_id: resolveLiveSessionId(sessions, events[0]?.live_session_id),
+    my_questions: asked.map((question) => ({
+      id: question.id,
+      session_id: question.session_id,
+      session_title: one(question.event_sessions)?.title || '—',
+      body: question.body,
+      asked_at: question.asked_at,
+    })),
+  };
+}
+
+// ask_session_question reports a status instead of raising, so the page can show a specific
+// sentence. A wrong card is never spelled out: INVALID, REVOKED and WRONG_EVENT all read the
+// same, as they do on the profile endpoint.
+const QUESTION_ERRORS = {
+  INVALID: () => errors.notFound(INVALID_CARD),
+  REVOKED: () => errors.notFound(INVALID_CARD),
+  WRONG_EVENT: () => errors.notFound(INVALID_CARD),
+  NOT_CHECKED_IN: () => errors.conflict('Please check in at the registration desk before asking a question.'),
+  BREAK: () => errors.conflict('That slot is a break and takes no questions. Choose a session.'),
+  TOO_FAST: () => errors.conflict('Wait a few seconds, then send your question again.'),
+  CLOSED: () => errors.conflict('This event is closed, so questions can no longer be sent.'),
+};
+
+export function askedQuestion(result, body) {
+  if (result?.status !== 'ASKED') throw (QUESTION_ERRORS[result?.status] ?? errors.internal)();
+  return {
+    id: result.question_id,
+    session_id: result.session_id,
+    session_title: result.session_title,
+    body,
+    asked_at: result.asked_at,
+  };
 }
 
 function organisation(attendee, snapshots) {

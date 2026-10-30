@@ -46,6 +46,33 @@
       </dl>
     </section>
 
+    <section id="qa" class="verify-card qa-card" hidden>
+      <h2>Ask a question</h2>
+      <p class="muted">Your question goes to the event team with your name. It is not shown to the room.</p>
+
+      <p class="alert" id="qa-locked" hidden>Please check in at the registration desk before asking a question.</p>
+
+      <form id="qa-form" novalidate hidden>
+        <div class="field">
+          <label for="qa-session">Session</label>
+          <select id="qa-session" name="session_id" required></select>
+        </div>
+        <div class="field">
+          <label for="qa-body">Your question</label>
+          <textarea id="qa-body" name="body" rows="4" maxlength="10000" required
+            placeholder="What would you like to ask?"></textarea>
+        </div>
+        <p class="alert" id="qa-error" role="alert" hidden></p>
+        <button class="btn primary" type="submit" id="qa-send">Send question</button>
+        <p class="qa-sent" id="qa-sent" role="status" hidden>Question sent. Thank you.</p>
+      </form>
+
+      <div id="qa-mine" hidden>
+        <h3>Your questions</h3>
+        <ul class="qa-list" id="qa-list"></ul>
+      </div>
+    </section>
+
     <section id="profile-error" class="verify-card verify-error" role="alert" hidden>
       <div class="verify-error-mark" aria-hidden="true">!</div>
       <h1>Unable to verify attendee</h1>

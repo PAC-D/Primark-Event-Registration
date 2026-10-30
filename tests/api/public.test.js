@@ -84,6 +84,8 @@ test('a public QR profile returns verified attendee details without recording at
     factory: '',
     organisation_name: '',
     has_photo: true,
+    // No agenda rows in this fixture, so the page gets no Q&A section.
+    qa: null,
   });
   assert.equal(db.calls.some((call) => call.fn === 'check_in_registration'), false);
   assert.equal(db.calls.some((call) => call.table === 'attendance'), false);

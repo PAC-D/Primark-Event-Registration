@@ -26,7 +26,7 @@ export async function loadPublicProfile(db, value) {
   if (!credential || credential.status !== 'active') return null;
 
   const registrations = await runQuery(db.from('event_registrations')
-    .select(`id, status,
+    .select(`id, event_id, status,
       attendees(id, name, email, designation, from_type, organisation_name, photo_path),
       registration_orgs(kind, name)`)
     .eq('id', credential.registration_id)
@@ -47,5 +47,9 @@ export async function loadPublicProfile(db, value) {
       has_photo: Boolean(attendee.photo_path),
     },
     photoPath: attendee.photo_path || null,
+    // The Q&A payload is loaded separately: the photo endpoint uses this profile too and has
+    // no use for the agenda.
+    registrationId: registration.id,
+    eventId: registration.event_id,
   };
 }

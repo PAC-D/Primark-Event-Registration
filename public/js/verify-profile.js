@@ -1,3 +1,5 @@
+import { EVENT_TIME_ZONE } from '/shared/constants.js';
+
 const $ = (selector) => document.querySelector(selector);
 const TYPE_LABELS = { supplier: 'Supplier', factory: 'Factory', other: 'Other' };
 let photoUrl = null;
@@ -8,11 +10,11 @@ function credentialFromFragment() {
   try { return decodeURIComponent(value).trim(); } catch { return value.trim(); }
 }
 
-async function request(path, credential) {
+async function request(path, payload) {
   const response = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: path.endsWith('/photo') ? 'image/*' : 'application/json' },
-    body: JSON.stringify({ credential }),
+    body: JSON.stringify(payload),
     cache: 'no-store',
   });
   if (!response.ok) {
@@ -39,7 +41,7 @@ async function loadPhoto(credential, profile) {
   placeholder.textContent = initials(profile.name);
   if (!profile.has_photo) return;
   try {
-    const response = await request('/api/attendee-profile/photo', credential);
+    const response = await request('/api/attendee-profile/photo', { credential });
     photoUrl = URL.createObjectURL(await response.blob());
     image.src = photoUrl;
     image.alt = `Photo of ${profile.name}`;
@@ -50,6 +52,78 @@ async function loadPhoto(credential, profile) {
   }
 }
 
+const clock = (value, options) => new Date(value).toLocaleString('en-GB', { timeZone: EVENT_TIME_ZONE, ...options });
+const timeOnly = (value) => clock(value, { hour: '2-digit', minute: '2-digit' });
+
+function sessionOption(session) {
+  const option = document.createElement('option');
+  option.value = session.id;
+  const isBreak = session.kind !== 'session';
+  option.textContent = `${timeOnly(session.starts_at)} · ${session.title}${isBreak ? ' (break)' : ''}`;
+  option.disabled = isBreak;
+  return option;
+}
+
+// User-written text, so every value goes in as a text node: never innerHTML.
+function questionItem(question) {
+  const item = document.createElement('li');
+  const head = document.createElement('span');
+  head.className = 'qa-list-meta';
+  head.textContent = `${question.session_title} · ${clock(question.asked_at, {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  })}`;
+  const body = document.createElement('p');
+  body.textContent = question.body;
+  item.append(head, body);
+  return item;
+}
+
+function addQuestion(question) {
+  $('#qa-list').prepend(questionItem(question));
+  $('#qa-mine').hidden = false;
+}
+
+function renderQa(credential, qa) {
+  if (!qa) return;
+  $('#qa').hidden = false;
+  qa.my_questions.forEach(addQuestion);
+
+  // Asking needs a check-in; the programme and earlier questions stay readable without one.
+  if (!qa.checked_in) {
+    $('#qa-locked').hidden = false;
+    return;
+  }
+
+  const form = $('#qa-form');
+  const select = $('#qa-session');
+  select.append(...qa.sessions.map(sessionOption));
+  if (qa.live_session_id) select.value = qa.live_session_id;
+  form.hidden = false;
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const send = $('#qa-send');
+    const bodyField = $('#qa-body');
+    const error = $('#qa-error');
+    error.hidden = true;
+    $('#qa-sent').hidden = true;
+    send.disabled = true;
+    try {
+      const response = await request('/api/questions', {
+        credential, session_id: select.value, body: bodyField.value,
+      });
+      addQuestion(await response.json());
+      bodyField.value = '';
+      $('#qa-sent').hidden = false;
+    } catch (failure) {
+      error.textContent = failure.message;
+      error.hidden = false;
+    } finally {
+      send.disabled = false;
+    }
+  });
+}
+
 async function loadProfile() {
   const credential = credentialFromFragment();
   if (!credential) {
@@ -57,7 +131,7 @@ async function loadProfile() {
     return;
   }
   try {
-    const response = await request('/api/attendee-profile', credential);
+    const response = await request('/api/attendee-profile', { credential });
     const profile = await response.json();
     const isOther = profile.attendee_type === 'other';
     $('#profile-name').textContent = profile.name;
@@ -75,6 +149,7 @@ async function loadProfile() {
     if (profile.email) email.href = `mailto:${profile.email}`; else email.removeAttribute('href');
     $('#profile-loading').hidden = true;
     $('#profile-result').hidden = false;
+    renderQa(credential, profile.qa);
     await loadPhoto(credential, profile);
   } catch (error) {
     showError(error.message);

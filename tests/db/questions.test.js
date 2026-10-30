@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import request from 'supertest';
+import { createApp } from '../../src/create-app.js';
+import { testConfig } from '../helpers/fake-db.js';
 import { createCredential, credentialHash } from '../../src/services/credential.js';
 import { check, payload, pick, register, seedOrgs, skipReason, testDb, wipe } from '../helpers/db.js';
 
@@ -304,5 +307,128 @@ describe('session questions', { skip: skipReason }, () => {
   test('seed_event_agenda raises NOT_FOUND for an unknown event', async () => {
     const { error } = await db.rpc('seed_event_agenda', { p_event_id: randomUUID(), p_date: '2026-11-04' });
     assert.equal(error?.message, 'NOT_FOUND');
+  });
+  // --- public API: the attendee's own page ---
+
+  const app = () => createApp({ db, config: testConfig });
+  const profile = (credential = fixture.credential.token) =>
+    request(app()).post('/api/attendee-profile').send({ credential });
+  const post = (body) => request(app()).post('/api/questions').send(body);
+  const question = (sessionId, body = 'What is the edge crush tolerance?', credential = null) =>
+    post({ credential: credential ?? fixture.credential.token, session_id: sessionId, body });
+
+  test('the profile carries the agenda, the resolved live session and no-store', async () => {
+    const res = await profile().expect(200);
+    assert.equal(res.headers['cache-control'], 'no-store');
+    assert.equal(res.body.qa.checked_in, true);
+    assert.equal(res.body.qa.sessions.length, 3);
+    assert.deepEqual(res.body.qa.sessions.map((s) => s.position), [1, 2, 3]);
+    assert.deepEqual(res.body.qa.sessions.map((s) => s.kind), ['session', 'break', 'session']);
+    // Every fixture session is in 2030, so the clock is before the first one.
+    assert.equal(res.body.qa.live_session_id, fixture.session.id);
+    assert.deepEqual(res.body.qa.my_questions, []);
+  });
+
+  test('the profile reports not checked in once the check-in is deleted', async () => {
+    await check(db.rpc('delete_attendance', {
+      p_registration_id: fixture.registration.id,
+      p_event_day_id: fixture.days[0].id,
+    }));
+    const res = await profile().expect(200);
+    assert.equal(res.body.qa.checked_in, false);
+  });
+
+  test('the profile has no qa payload when the event has no agenda', async () => {
+    await check(db.from('event_sessions').delete().eq('event_id', fixture.event.id));
+    const res = await profile().expect(200);
+    assert.equal(res.body.qa, null);
+  });
+
+  test('the profile lists the attendee own questions, newest first', async () => {
+    await check(ask(fixture.session.id, 'First question'));
+    await check(backdate(5));
+    await check(ask(fixture.dayTwoSession.id, 'Second question'));
+    const res = await profile().expect(200);
+    assert.deepEqual(res.body.qa.my_questions.map((q) => q.body), ['Second question', 'First question']);
+    assert.equal(res.body.qa.my_questions[0].session_title, 'Second Day Session');
+  });
+
+  test('posting a question returns 201 and the stored question', async () => {
+    const res = await question(fixture.session.id).expect(201);
+    assert.equal(res.headers['cache-control'], 'no-store');
+    assert.ok(res.body.id);
+    assert.equal(res.body.session_id, fixture.session.id);
+    assert.equal(res.body.body, 'What is the edge crush tolerance?');
+  });
+
+  test('a fallback code is accepted as the credential', async () => {
+    await question(fixture.session.id, 'Asked by code', fixture.credential.fallback).expect(201);
+  });
+
+  test('not being checked in is a 409 the page can show', async () => {
+    await check(db.rpc('delete_attendance', {
+      p_registration_id: fixture.registration.id,
+      p_event_day_id: fixture.days[0].id,
+    }));
+    const res = await question(fixture.session.id).expect(409);
+    assert.equal(res.body.error, 'CONFLICT');
+    assert.match(res.body.message, /check in/i);
+  });
+
+  test('a break is a 409', async () => {
+    const res = await question(fixture.brk.id).expect(409);
+    assert.equal(res.body.error, 'CONFLICT');
+  });
+
+  test('a second question too soon is a 409', async () => {
+    await question(fixture.session.id, 'First question').expect(201);
+    const res = await question(fixture.session.id, 'Second question').expect(409);
+    assert.equal(res.body.error, 'CONFLICT');
+  });
+
+  test('a closed event is a 409', async () => {
+    await check(db.from('events').update({ status: 'closed' }).eq('id', fixture.event.id));
+    const res = await question(fixture.session.id).expect(409);
+    assert.equal(res.body.error, 'CONFLICT');
+  });
+
+  test('an unknown credential is a 404', async () => {
+    const res = await question(fixture.session.id, 'Anybody there?', 'ER1.definitely-not-a-real-token').expect(404);
+    // An unmatched /api path is also a 404 NOT_FOUND; only the message proves the route ran.
+    assert.match(res.body.message, /QR code/i);
+  });
+
+  test('a revoked credential is a 404', async () => {
+    const replacement = createCredential();
+    await check(db.rpc('issue_registration_credential', {
+      p_registration_id: fixture.registration.id,
+      p_token_hash: replacement.tokenHash,
+      p_fallback_code_hash: replacement.fallbackHash,
+    }));
+    const res = await question(fixture.session.id, 'Asked on the old card').expect(404);
+    assert.match(res.body.message, /QR code/i);
+  });
+
+  test('a session from another event is a 404', async () => {
+    const [other] = await check(db.from('events').insert({
+      code: 'public-other', name: 'Public Other', status: 'open',
+    }).select('id'));
+    const [otherSession] = await check(db.from('event_sessions').insert({
+      event_id: other.id, position: 1, title: 'Elsewhere', kind: 'session',
+      starts_at: '2030-01-01T03:30:00Z', ends_at: '2030-01-01T04:00:00Z',
+    }).select('id'));
+    const res = await question(otherSession.id).expect(404);
+    assert.match(res.body.message, /QR code/i);
+  });
+
+  test('a body over the limit is rejected before the database', async () => {
+    const res = await question(fixture.session.id, 'x'.repeat(10001)).expect(400);
+    assert.equal(res.body.error, 'VALIDATION');
+    assert.ok(res.body.fields.body);
+    assert.equal((await check(db.from('session_questions').select('id'))).length, 0);
+  });
+
+  test('a missing session id is rejected', async () => {
+    await post({ credential: fixture.credential.token, body: 'A real question' }).expect(400);
   });
 });

@@ -3,9 +3,11 @@ import { SEAT_LIMITS } from '../../public/shared/constants.js';
 import { validateRegistration } from '../../public/shared/validate.js';
 import { callRpc, runQuery } from '../db.js';
 import { errors } from '../errors.js';
+import { scannedCredentialHash } from '../services/credential.js';
 import { notifyRegistration, registrationConfirmation } from '../services/notify.js';
 import { PHOTO_BUCKET, photoContentType } from '../services/photo.js';
 import { loadPublicProfile } from '../services/public-profile.js';
+import { askedQuestion, loadQa, validateQuestion } from '../services/questions.js';
 
 export function publicRoutes({ db, config }) {
   const router = Router();
@@ -40,7 +42,18 @@ export function publicRoutes({ db, config }) {
     const result = await loadPublicProfile(db, req.body?.credential);
     if (!result) throw errors.notFound('This attendee QR code is invalid or no longer active.');
     res.set('Cache-Control', 'no-store');
-    res.json(result.profile);
+    res.json({ ...result.profile, qa: await loadQa(db, result) });
+  });
+
+  router.post('/questions', async (req, res) => {
+    const { credential, sessionId, body } = validateQuestion(req.body);
+    const result = await callRpc(db, 'ask_session_question', {
+      p_credential_hash: scannedCredentialHash(credential),
+      p_session_id: sessionId,
+      p_body: body,
+    });
+    res.set('Cache-Control', 'no-store');
+    res.status(201).json(askedQuestion(result, body));
   });
 
   router.post('/attendee-profile/photo', async (req, res) => {

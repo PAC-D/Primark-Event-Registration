@@ -882,6 +882,31 @@ td { font-variant-numeric: tabular-nums; }
 .verify-error-mark { display: grid; place-items: center; width: 58px; height: 58px; margin: 4px auto 14px; border-radius: 50%; color: #fff; background: var(--danger-fill); font-size: 2rem; font-weight: 700; }
 .verify-error { border-color: var(--danger-line); }
 
+/* Session Q&A, on the attendee's own verification page. */
+.qa-card { margin-top: 16px; text-align: left; }
+.qa-card h2 { margin: 0; color: var(--navy); font-size: 1.25rem; }
+.qa-card > p.muted { margin: 6px 0 18px; font-size: 0.9rem; }
+.qa-card .field { margin-bottom: 16px; }
+.qa-card .btn { width: 100%; justify-content: center; }
+.field textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: var(--shadow-xs);
+  resize: vertical;
+}
+.field textarea:focus-visible { outline: none; border-color: var(--blue); box-shadow: var(--shadow-xs), var(--focus-ring); }
+.qa-sent { margin: 12px 0 0; color: var(--ok); font-weight: 600; }
+.qa-card h3 { margin: 22px 0 10px; color: var(--navy); font-size: 1rem; }
+.qa-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.qa-list li { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: #fff; }
+.qa-list-meta { display: block; color: var(--muted); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.qa-list p { margin: 6px 0 0; color: var(--ink-2); overflow-wrap: anywhere; white-space: pre-wrap; }
+
 /* ---------- Dialog ---------- */
 
 html.modal-open, html.modal-open body { overflow: hidden; overscroll-behavior: none; }
