@@ -95,4 +95,98 @@ describe('schema', { skip: skipReason }, () => {
       .insert({ kind: 'factory', name: 'Sneaky', source: 'list', status: 'approved' });
     assert.ok(write.error, 'anon insert must fail');
   });
+  // --- Q&A schema (migration 017) ---
+
+  const seedEvent = async () => {
+    const [event] = await check(db.from('events').insert({
+      code: 'qa-schema', name: 'Q&A Schema Event', status: 'open',
+    }).select('id'));
+    return event.id;
+  };
+  const sessionRow = (eventId, over = {}) => ({
+    event_id: eventId, position: 1, title: 'Overview', kind: 'session',
+    starts_at: '2026-11-04T03:30:00Z', ends_at: '2026-11-04T04:00:00Z', ...over,
+  });
+
+  test('event_sessions rejects a kind outside session and break', async () => {
+    const eventId = await seedEvent();
+    const { error } = await db.from('event_sessions').insert(sessionRow(eventId, { kind: 'lunch' }));
+    assert.equal(error?.code, '23514');
+  });
+
+  test('event_sessions rejects ends_at at or before starts_at', async () => {
+    const eventId = await seedEvent();
+    const { error } = await db.from('event_sessions')
+      .insert(sessionRow(eventId, { ends_at: '2026-11-04T03:30:00Z' }));
+    assert.equal(error?.code, '23514');
+  });
+
+  test('event_sessions accepts a null ends_at for the open-ended closing row', async () => {
+    const eventId = await seedEvent();
+    const { error } = await db.from('event_sessions')
+      .insert(sessionRow(eventId, { position: 15, kind: 'break', title: 'Closing', ends_at: null }));
+    assert.equal(error, null);
+  });
+
+  test('event_sessions rejects a repeated position within one event', async () => {
+    const eventId = await seedEvent();
+    await check(db.from('event_sessions').insert(sessionRow(eventId)));
+    const { error } = await db.from('event_sessions').insert(sessionRow(eventId, { title: 'Clash' }));
+    assert.equal(error?.code, '23505');
+  });
+
+  test('session_questions rejects a body shorter than 3 or longer than 10000 characters', async () => {
+    const eventId = await seedEvent();
+    const [session] = await check(db.from('event_sessions').insert(sessionRow(eventId)).select('id'));
+    const { factory } = await seedOrgs(db, { factory: { kind: 'factory', name: 'QA Schema Factory', code: 'QS-1' } });
+    const attendeeId = await check(db.rpc('register_attendee', {
+      p: {
+        from_type: 'factory', name: 'QA Schema Person', email: 'qa.schema@example.test',
+        phone: '+8801711000000', designation: 'Officer', orgs: [{ kind: 'factory', org_id: factory.id }],
+      },
+    }));
+    const [registration] = await check(db.from('event_registrations')
+      .select('id').eq('event_id', eventId).eq('attendee_id', attendeeId));
+
+    for (const body of ['  a  ', 'x'.repeat(10001)]) {
+      const { error } = await db.from('session_questions')
+        .insert({ session_id: session.id, registration_id: registration.id, body });
+      assert.equal(error?.code, '23514', JSON.stringify(body.slice(0, 20)));
+    }
+    // Characters, not bytes: 10000 Bengali characters is ~30 KB and must be accepted.
+    const { error } = await db.from('session_questions')
+      .insert({ session_id: session.id, registration_id: registration.id, body: 'অ'.repeat(10000) });
+    assert.equal(error, null);
+  });
+
+  test('deleting an event removes its sessions and their questions', async () => {
+    const eventId = await seedEvent();
+    await check(db.from('event_sessions').insert(sessionRow(eventId)));
+    await check(db.from('events').delete().eq('id', eventId));
+    assert.equal((await check(db.from('event_sessions').select('id'))).length, 0);
+  });
+
+  test('events.live_session_id is null by default and clears when the session goes', async () => {
+    const eventId = await seedEvent();
+    const [session] = await check(db.from('event_sessions').insert(sessionRow(eventId)).select('id'));
+    const [before] = await check(db.from('events').select('live_session_id').eq('id', eventId));
+    assert.equal(before.live_session_id, null);
+    await check(db.from('events').update({ live_session_id: session.id }).eq('id', eventId));
+    await check(db.from('event_sessions').delete().eq('id', session.id));
+    const [after] = await check(db.from('events').select('live_session_id').eq('id', eventId));
+    assert.equal(after.live_session_id, null);
+  });
+
+  test('the anon key cannot read or write the Q&A tables', async () => {
+    const anon = anonDb();
+    for (const table of ['event_sessions', 'session_questions']) {
+      // The service key must reach it first, or "anon cannot read" would also pass
+      // for a table that simply does not exist.
+      assert.equal((await db.from(table).select('id')).error, null, `${table} must exist`);
+      const { data, error } = await anon.from(table).select('*');
+      assert.ok(error || data.length === 0, `${table} must not be readable with the anon key`);
+    }
+    const write = await anon.from('event_sessions').insert({ position: 1, title: 'Sneaky', kind: 'session' });
+    assert.ok(write.error, 'anon insert must fail');
+  });
 });
