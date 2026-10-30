@@ -8,6 +8,7 @@ import { photosRoutes } from './routes/photos.js';
 import { publicRoutes } from './routes/public.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const publicDir = path.join(__dirname, '..', 'public');
 
 export function createApp({ db, config, loginDelayMs = 1000 }) {
   const app = express();
@@ -29,21 +30,21 @@ export function createApp({ db, config, loginDelayMs = 1000 }) {
       if (pagePath.startsWith('/api')) {
         return next(errors.maintenance());
       }
-      res.status(503).sendFile(path.join(__dirname, '..', 'public', 'maintenance.html'));
+      res.status(503).sendFile('maintenance.html', { root: publicDir });
     });
   }
 
   // Served before express.static so the landing page always wins on any host.
   const landingPage = config.registrationClosed ? 'registration-closed.html' : 'index.html';
   app.get(['/', '/index', '/index.html'], (_req, res) => {
-    res.sendFile(landingPage, { root: path.join(__dirname, '..', 'public') });
+    res.sendFile(landingPage, { root: publicDir });
   });
   if (config.registrationClosed) {
     app.post('/api/register', (_req, _res, next) => next(errors.registrationClosed()));
   }
   app.get('/vendor/html5-qrcode.min.js', (_req, res) => {
     res.set('Cache-Control', 'public, max-age=31536000, immutable');
-    res.sendFile(path.join(__dirname, '..', 'node_modules', 'html5-qrcode', 'html5-qrcode.min.js'));
+    res.sendFile('html5-qrcode.min.js', { root: path.join(__dirname, '..', 'node_modules', 'html5-qrcode') });
   });
 
   app.use('/api/admin', adminRoutes({ db, config, loginDelayMs }));
