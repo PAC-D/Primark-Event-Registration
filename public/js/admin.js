@@ -876,8 +876,32 @@ $('#login-form').addEventListener('submit', async (event) => {
 
 $('#refresh').addEventListener('click', refresh);
 $('#add-participant').addEventListener('click', openAddParticipant);
-$('#export').addEventListener('click', () => guarded(exportExcel));
-$('#export-with-qrs').addEventListener('click', () => guarded(() => exportExcel(true)));
+const exportButton = $('#export');
+const exportMenu = $('#export-menu');
+const closeExportMenu = () => {
+  exportMenu.hidden = true;
+  exportButton.setAttribute('aria-expanded', 'false');
+};
+exportButton.addEventListener('click', () => {
+  const opening = exportMenu.hidden;
+  exportMenu.hidden = !opening;
+  exportButton.setAttribute('aria-expanded', String(opening));
+  if (opening) exportMenu.querySelector('[role="menuitem"]').focus();
+});
+exportMenu.addEventListener('click', (event) => {
+  const option = event.target.closest('[data-export-mode]');
+  if (!option) return;
+  closeExportMenu();
+  guarded(() => exportExcel(option.dataset.exportMode === 'qr'));
+});
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.export-menu-wrap')) closeExportMenu();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || exportMenu.hidden) return;
+  closeExportMenu();
+  exportButton.focus();
+});
 $('#logout').addEventListener('click', async () => {
   await api('/api/admin/logout', { method: 'POST' }).catch(() => {});
   data = null;
