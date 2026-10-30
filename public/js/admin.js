@@ -543,8 +543,12 @@ async function downloadExport(path, fallbackName, failureMessage) {
   saveBlob(await res.blob(), filename);
 }
 
-const exportExcel = () =>
-  downloadExport('/api/admin/export', 'registrations.xlsx', 'Export failed, please try again.');
+const exportExcel = (includeQr = false) =>
+  downloadExport(
+    includeQr ? '/api/admin/export?include_qr=1' : '/api/admin/export',
+    'registrations.xlsx',
+    'Export failed, please try again.',
+  );
 
 async function downloadQrPdf(eventId, registrationIds, button) {
   button.disabled = true;
@@ -873,6 +877,7 @@ $('#login-form').addEventListener('submit', async (event) => {
 $('#refresh').addEventListener('click', refresh);
 $('#add-participant').addEventListener('click', openAddParticipant);
 $('#export').addEventListener('click', () => guarded(exportExcel));
+$('#export-with-qrs').addEventListener('click', () => guarded(() => exportExcel(true)));
 $('#logout').addEventListener('click', async () => {
   await api('/api/admin/logout', { method: 'POST' }).catch(() => {});
   data = null;

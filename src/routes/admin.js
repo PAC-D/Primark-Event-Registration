@@ -74,9 +74,13 @@ export function adminRoutes({ db, config, loginDelayMs }) {
 
   router.get('/export', async (req, res) => {
     const data = await loadDashboard(db);
-    const event = (await listQrEvents(db)).find((item) => item.confirmed_registrations > 0);
+    const includeQr = req.query.include_qr === '1';
+    let event;
     let qrImages = [];
-    if (event) {
+    if (includeQr) {
+      event = (await listQrEvents(db)).find((item) => item.confirmed_registrations > 0);
+    }
+    if (includeQr && event) {
       const result = await generateQrImages(db, event.id, {
         baseUrl: `${req.protocol}://${req.get('host')}`,
       });
@@ -85,7 +89,7 @@ export function adminRoutes({ db, config, loginDelayMs }) {
         png,
       })) ?? [];
     }
-    const buffer = await buildWorkbook(data, { qrEvent: event, qrImages }).xlsx.writeBuffer();
+    const buffer = await buildWorkbook(data, includeQr ? { qrEvent: event, qrImages } : {}).xlsx.writeBuffer();
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="${exportFilename(new Date(data.generated_at))}"`,
