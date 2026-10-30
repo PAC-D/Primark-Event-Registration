@@ -198,12 +198,15 @@ function renderAttendance() {
     <div class="attendance-stat"><span class="muted">Pending</span><strong>${s.pending}</strong></div>
     ${s.inactive ? `<div class="attendance-stat"><span class="muted">Inactive</span><strong>${s.inactive}</strong></div>` : ''}
   </div>${table(
-    ['Name', 'Designation', 'Organisation', 'Registration', 'Attendance', 'First check-in', 'Scanner'],
+    ['Name', 'Designation', 'Organisation', 'Registration', 'Attendance', 'First check-in', 'Scanner', ''],
     rows.map((row) => [
       escapeHtml(row.name), escapeHtml(row.designation || '—'), escapeHtml(row.organisation),
       `<span class="badge ${escapeHtml(row.registration_status)}">${escapeHtml(row.registration_status)}</span>`,
       `<span class="badge ${escapeHtml(row.attendance_status)}">${row.attendance_status === 'present' ? 'Present' : 'Pending'}</span>`,
       row.checked_in_at ? formatTime(row.checked_in_at) : '—', escapeHtml(row.device_id || '—'),
+      row.attendance_status === 'present'
+        ? `<button type="button" class="btn small danger" data-attendance-delete="${escapeHtml(row.registration_id)}">Delete check-in</button>`
+        : '—',
     ]),
     'No attendees match.',
   )}`;
@@ -292,11 +295,13 @@ function showModalError(html) {
   box.hidden = false;
 }
 
-async function runModalAction(action) {
+// `after` reloads whatever the action changed. The default refreshes the dashboard and
+// participants; the attendance tab has its own loader and its own summary counters.
+async function runModalAction(action, after = refresh) {
   try {
     await action();
     closeModal();
-    await refresh();
+    await after();
   } catch (err) {
     if (err.status === 401) showLogin();
     else showModalError(escapeHtml(err.message));
@@ -370,6 +375,29 @@ function confirmDelete(id) {
     </div>`);
   $('#confirm-delete').addEventListener('click', () =>
     runModalAction(() => api(`/api/admin/participants/${id}`, { method: 'DELETE' })));
+}
+
+// Deletes one day's check-in, not the person. They return to Pending and can be scanned again.
+function confirmDeleteAttendance(registrationId) {
+  const row = attendanceData?.rows.find((item) => item.registration_id === registrationId);
+  const day = attendanceDays?.find((item) => item.id === attendanceDayId);
+  if (!row || !day) return;
+  openModal(`
+    <h2>Delete ${escapeHtml(row.name)}'s check-in?</h2>
+    <p>This removes their attendance for ${escapeHtml(day.label)} (${formatEventDate(day.event_date)}).
+      They return to Pending and can be scanned again. Any questions they asked are kept.</p>
+    <p class="alert" id="modal-error" role="alert" hidden></p>
+    <div class="modal-actions">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="button" class="btn danger" id="confirm-delete">Delete check-in</button>
+    </div>`);
+  $('#confirm-delete').addEventListener('click', () => runModalAction(
+    () => api('/api/admin/attendance', {
+      method: 'DELETE',
+      body: { registration_id: registrationId, event_day_id: attendanceDayId },
+    }),
+    loadAttendanceTab,
+  ));
 }
 
 function openMerge(id) {
@@ -688,6 +716,7 @@ document.addEventListener('click', (event) => {
     await loadData();
   });
   else if (d.merge) openMerge(d.merge);
+  else if (d.attendanceDelete) confirmDeleteAttendance(d.attendanceDelete);
   else if ('attendanceExport' in d) guarded(exportAttendance);
   else if ('close' in d) closeModal();
 });
