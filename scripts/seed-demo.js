@@ -70,6 +70,10 @@ async function main() {
   ], { onConflict: 'event_id,event_date' }).select('id, event_date, label'), 'Create demo event days');
   days.sort((a, b) => a.event_date.localeCompare(b.event_date));
 
+  // The real seminar agenda, so Q&A has sessions to develop and demo against. Idempotent.
+  await check(db.rpc('seed_event_agenda', { p_event_id: event.id, p_date: days[0].event_date }),
+    'Seed demo agenda');
+
   const suppliers = await check(
     db.from('organisations').select('id, kind, name').eq('kind', 'supplier').eq('status', 'approved').order('name').limit(3),
     'Load suppliers',

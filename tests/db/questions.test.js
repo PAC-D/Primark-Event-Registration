@@ -248,4 +248,61 @@ describe('session questions', { skip: skipReason }, () => {
     const { error } = await db.rpc('delete_session_question', { p_id: randomUUID() });
     assert.equal(error?.message, 'NOT_FOUND');
   });
+  // --- seed_event_agenda (migration 018) ---
+
+  const seedAgenda = async () => {
+    const [bare] = await check(db.from('events').insert({
+      code: 'agenda-seed', name: 'Agenda Seed', status: 'open', timezone: 'Asia/Dhaka',
+    }).select('id'));
+    const inserted = await check(db.rpc('seed_event_agenda', {
+      p_event_id: bare.id, p_date: '2026-11-04',
+    }));
+    return { eventId: bare.id, inserted };
+  };
+
+  test('seed_event_agenda inserts the 15 agenda rows and is idempotent', async () => {
+    const { eventId, inserted } = await seedAgenda();
+    assert.equal(inserted, 15);
+    const again = await check(db.rpc('seed_event_agenda', { p_event_id: eventId, p_date: '2026-11-04' }));
+    assert.equal(again, 0);
+    assert.equal((await check(db.from('event_sessions').select('id').eq('event_id', eventId))).length, 15);
+  });
+
+  test('the agenda holds 12 sessions and 3 breaks', async () => {
+    const { eventId } = await seedAgenda();
+    const rows = await check(db.from('event_sessions').select('kind').eq('event_id', eventId));
+    assert.equal(rows.filter((row) => row.kind === 'session').length, 12);
+    assert.equal(rows.filter((row) => row.kind === 'break').length, 3);
+  });
+
+  test('local agenda times are resolved against the event timezone', async () => {
+    const { eventId } = await seedAgenda();
+    const rows = await check(db.from('event_sessions')
+      .select('position, title, starts_at, ends_at').eq('event_id', eventId).order('position'));
+    // 09:30 Asia/Dhaka (UTC+6) is 03:30Z.
+    assert.equal(new Date(rows[0].starts_at).toISOString(), '2026-11-04T03:30:00.000Z');
+    assert.equal(new Date(rows[0].ends_at).toISOString(), '2026-11-04T04:00:00.000Z');
+    assert.equal(rows[0].title, 'Primark Supply Chain & Bangladesh Carton Nomination Overview');
+    // Lunch, 13:05-15:00 local.
+    assert.equal(new Date(rows[7].starts_at).toISOString(), '2026-11-04T07:05:00.000Z');
+    assert.equal(new Date(rows[7].ends_at).toISOString(), '2026-11-04T09:00:00.000Z');
+  });
+
+  test('the closing row is open-ended and the Carton Connect title is kept verbatim', async () => {
+    const { eventId } = await seedAgenda();
+    const rows = await check(db.from('event_sessions')
+      .select('position, title, kind, ends_at').eq('event_id', eventId).order('position'));
+    assert.equal(rows[14].title, 'Closing Remarks & Networking');
+    assert.equal(rows[14].kind, 'break');
+    assert.equal(rows[14].ends_at, null);
+    assert.equal(
+      rows[3].title,
+      'From Nomination to Order: Garment Supplier & Packaging Supplier Integration [Carton Connect]',
+    );
+  });
+
+  test('seed_event_agenda raises NOT_FOUND for an unknown event', async () => {
+    const { error } = await db.rpc('seed_event_agenda', { p_event_id: randomUUID(), p_date: '2026-11-04' });
+    assert.equal(error?.message, 'NOT_FOUND');
+  });
 });
