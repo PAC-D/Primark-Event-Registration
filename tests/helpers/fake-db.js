@@ -36,10 +36,19 @@ export function fakeDb({ rpc = {}, tables = {} } = {}) {
         select: () => request,
         eq: () => request,
         or: () => request,
+        is: () => request,
+        gte: () => request,
+        lte: () => request,
         limit: () => request,
         not: () => request,
         order: () => request,
         in: () => request,
+        single: () => ({
+          then: (resolve, reject) =>
+            Promise.resolve(typeof result === 'function' ? result() : result)
+              .then((r) => ({ ...r, data: Array.isArray(r.data) ? r.data[0] ?? null : r.data }))
+              .then(resolve, reject),
+        }),
         then: (resolve, reject) =>
           Promise.resolve(typeof result === 'function' ? result() : result).then(resolve, reject),
       };
