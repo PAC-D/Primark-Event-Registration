@@ -36,7 +36,7 @@ export function createApp({ db, config, loginDelayMs = 1000 }) {
   // Served before express.static so the landing page always wins on any host.
   const landingPage = config.registrationClosed ? 'registration-closed.html' : 'index.html';
   app.get(['/', '/index', '/index.html'], (_req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'public', landingPage));
+    res.sendFile(landingPage, { root: path.join(__dirname, '..', 'public') });
   });
   if (config.registrationClosed) {
     app.post('/api/register', (_req, _res, next) => next(errors.registrationClosed()));
