@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { runQuery } from '../db.js';
+import { callRpc, runQuery } from '../db.js';
 import { errors } from '../errors.js';
 import { formatDhaka } from './export.js';
 
@@ -124,6 +124,33 @@ export function mapQuestionRows(questions) {
       email: attendee.email || '',
     };
   });
+}
+
+// Everything asked at one event, newest first, with the asker attached. The same shape feeds
+// the admin table and the workbook below.
+export async function loadQuestions(db, eventId, sessionId) {
+  if (!UUID_RE.test(String(eventId ?? ''))) throw errors.validation({ event_id: 'Choose an event.' });
+  const filterSession = String(sessionId ?? '').trim();
+  if (filterSession && !UUID_RE.test(filterSession)) throw errors.validation({ session_id: 'Choose a session.' });
+  const events = await runQuery(db.from('events').select('id, code, name, status').eq('id', eventId).limit(1));
+  const event = events[0];
+  if (!event) throw errors.notFound();
+
+  let query = db.from('session_questions')
+    .select(`id, session_id, body, asked_at,
+      event_sessions!inner(title, position, event_id),
+      event_registrations(attendees(name, designation, from_type, email, organisation_name),
+        registration_orgs(name))`)
+    .eq('event_sessions.event_id', eventId);
+  if (filterSession) query = query.eq('session_id', filterSession);
+  const questions = await runQuery(query.order('asked_at', { ascending: false }));
+
+  return { generated_at: new Date().toISOString(), event, rows: mapQuestionRows(questions) };
+}
+
+export async function deleteQuestion(db, id) {
+  if (!UUID_RE.test(String(id ?? ''))) throw errors.notFound();
+  await callRpc(db, 'delete_session_question', { p_id: id });
 }
 
 export function buildQuestionsWorkbook(data) {

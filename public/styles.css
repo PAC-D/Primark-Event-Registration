@@ -675,6 +675,7 @@ fieldset.field-invalid .radios label { border-color: var(--danger-fill); box-sha
   gap: 10px;
   width: 100%;
 }
+.questions-controls { grid-template-columns: minmax(200px, 1.2fr) minmax(200px, 1fr) auto; }
 .attendance-day-field {
   position: relative;
   display: block;
@@ -881,6 +882,19 @@ td { font-variant-numeric: tabular-nums; }
 @keyframes verify-spin { to { transform: rotate(360deg); } }
 .verify-error-mark { display: grid; place-items: center; width: 58px; height: 58px; margin: 4px auto 14px; border-radius: 50%; color: #fff; background: var(--danger-fill); font-size: 2rem; font-weight: 700; }
 .verify-error { border-color: var(--danger-line); }
+
+/* Questions in the admin table: full text, wrapped, never one long line. */
+.question-body { display: block; max-width: 46ch; white-space: pre-wrap; overflow-wrap: anywhere; }
+.question-quote {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--blue);
+  border-radius: 0 10px 10px 0;
+  background: var(--info-soft);
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 /* Session Q&A, on the attendee's own verification page. */
 .qa-card { margin-top: 16px; text-align: left; }

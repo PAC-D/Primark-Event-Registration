@@ -15,6 +15,10 @@ let data = null;
 let attendanceDays = null;
 let attendanceData = null;
 let attendanceDayId = '';
+let questionEvents = null;
+let questionsData = null;
+let questionEventId = '';
+let questionSessionId = '';
 let modalCleanup = null;
 
 const formatTime = (iso) => new Date(iso).toLocaleString('en-GB', {
@@ -48,6 +52,7 @@ async function loadData() {
   renderTiles();
   renderCharts(data, { onCoverageClick: showCoverage });
   if (view.tab === 'attendance') await loadAttendanceTab();
+  else if (view.tab === 'questions') await loadQuestionsTab();
   else renderTab({ animate: true });
 }
 
@@ -225,6 +230,44 @@ async function loadAttendanceTab() {
   renderTab({ animate: true });
 }
 
+function renderQuestions() {
+  if (!questionEvents) return '<p class="muted empty">Loading questions…</p>';
+  if (!questionEvents.length) return '<p class="muted empty">No events exist yet.</p>';
+  if (!questionsData) return '<p class="muted empty">Loading questions…</p>';
+  const query = view.search.trim().toLocaleLowerCase();
+  const rows = questionsData.rows.filter((row) =>
+    (!questionSessionId || row.session_id === questionSessionId)
+    && (!query || [row.body, row.session_title, row.name, row.organisation, row.designation]
+      .some((value) => String(value ?? '').toLocaleLowerCase().includes(query))));
+  return table(
+    ['Asked', 'Session', 'Question', 'Name', 'Designation', 'Organisation', ''],
+    rows.map((row) => [
+      formatTime(row.asked_at),
+      escapeHtml(row.session_title),
+      `<span class="question-body">${escapeHtml(row.body)}</span>`,
+      escapeHtml(row.name),
+      escapeHtml(row.designation),
+      escapeHtml(row.organisation),
+      `<button type="button" class="btn small danger" data-question-delete="${escapeHtml(row.id)}">Delete</button>`,
+    ]),
+    questionSessionId ? 'No questions for this session.' : query ? 'No questions match.' : 'No questions have been asked yet.',
+  );
+}
+
+async function loadQuestionsTab() {
+  questionsData = null;
+  renderTab();
+  if (!questionEvents) questionEvents = (await api('/api/admin/qr-events')).events;
+  if (!questionEvents.length) { renderTab({ animate: true }); return; }
+  if (!questionEvents.some((event) => event.id === questionEventId)) {
+    questionEventId = questionEvents[0].id;
+    questionSessionId = '';
+  }
+  renderChips();
+  questionsData = await api(`/api/admin/questions?event_id=${encodeURIComponent(questionEventId)}`);
+  renderTab({ animate: true });
+}
+
 function renderChips() {
   const chip = (group, value, label) =>
     `<button type="button" class="chip" data-chip-group="${group}" data-chip-value="${value}" aria-pressed="${view[group] === value}">${label}</button>`;
@@ -240,8 +283,21 @@ function renderChips() {
       </select></label>
       <button type="button" class="btn attendance-export" data-attendance-export>Export attendance</button>
     </div>`];
+  } else if (view.tab === 'questions' && questionEvents?.length) {
+    const sessions = [...new Map((questionsData?.rows ?? []).map((row) => [row.session_id, row])).values()]
+      .sort((a, b) => (a.session_position ?? 0) - (b.session_position ?? 0));
+    chips = [`<div class="attendance-controls questions-controls">
+      <label class="attendance-day-field" for="questions-event"><span>Event</span><select id="questions-event">
+      ${questionEvents.map((event) => `<option value="${escapeHtml(event.id)}" ${event.id === questionEventId ? 'selected' : ''}>${escapeHtml(event.name)}</option>`).join('')}
+      </select></label>
+      <label class="attendance-day-field" for="questions-session"><span>Session</span><select id="questions-session">
+      <option value="">All sessions</option>
+      ${sessions.map((row) => `<option value="${escapeHtml(row.session_id)}" ${row.session_id === questionSessionId ? 'selected' : ''}>${escapeHtml(row.session_title)}</option>`).join('')}
+      </select></label>
+      <button type="button" class="btn attendance-export" data-questions-export>Export questions</button>
+    </div>`];
   }
-  $('#chips').classList.toggle('attendance-filters', view.tab === 'attendance');
+  $('#chips').classList.toggle('attendance-filters', view.tab === 'attendance' || view.tab === 'questions');
   $('#chips').innerHTML = chips.join('');
 }
 
@@ -249,6 +305,7 @@ function renderTabContent() {
   if (view.tab === 'participants') return renderParticipants();
   if (view.tab === 'pending') return renderPending();
   if (view.tab === 'attendance') return renderAttendance();
+  if (view.tab === 'questions') return renderQuestions();
   return renderOrganisations(view.tab);
 }
 
@@ -258,7 +315,8 @@ function renderTab({ animate = false } = {}) {
     button.setAttribute('aria-selected', String(button.dataset.tab === view.tab));
   });
   renderChips();
-  $('#search').placeholder = view.tab === 'attendance' ? 'Search attendees…' : 'Search…';
+  const placeholders = { attendance: 'Search attendees…', questions: 'Search questions…' };
+  $('#search').placeholder = placeholders[view.tab] ?? 'Search…';
   const tableWrap = $('#table');
   tableWrap.classList.remove('tab-enter');
   tableWrap.innerHTML = renderTabContent();
@@ -400,6 +458,25 @@ function confirmDeleteAttendance(registrationId) {
   ));
 }
 
+function confirmDeleteQuestion(id) {
+  const row = questionsData?.rows.find((item) => item.id === id);
+  if (!row) return;
+  openModal(`
+    <h2>Delete this question?</h2>
+    <p>Asked by ${escapeHtml(row.name)} during ${escapeHtml(row.session_title)}. This cannot be undone,
+      and the attendee is not told.</p>
+    <blockquote class="question-quote">${escapeHtml(row.body)}</blockquote>
+    <p class="alert" id="modal-error" role="alert" hidden></p>
+    <div class="modal-actions">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="button" class="btn danger" id="confirm-delete">Delete question</button>
+    </div>`);
+  $('#confirm-delete').addEventListener('click', () => runModalAction(
+    () => api(`/api/admin/questions/${id}`, { method: 'DELETE' }),
+    loadQuestionsTab,
+  ));
+}
+
 function openMerge(id) {
   const source = data.pending.find((o) => String(o.id) === id);
   if (!source) return;
@@ -454,22 +531,20 @@ function openMerge(id) {
   $('#confirm-merge').addEventListener('click', () => merge(false));
 }
 
-async function exportExcel() {
-  const res = await fetch('/api/admin/export', { credentials: 'same-origin' });
+// Every workbook download: the server names the file, so the fallback is only for a stripped header.
+async function downloadExport(path, fallbackName, failureMessage) {
+  const res = await fetch(path, { credentials: 'same-origin' });
   if (res.status === 401) throw Object.assign(new Error('Please log in again.'), { status: 401 });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || 'Export failed, please try again.');
+    throw new Error(body.message || failureMessage);
   }
-  const blob = await res.blob();
-  const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'registrations.xlsx';
-  const url = URL.createObjectURL(blob);
-  const link = Object.assign(document.createElement('a'), { href: url, download: filename });
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
+  saveBlob(await res.blob(), filename);
 }
+
+const exportExcel = () =>
+  downloadExport('/api/admin/export', 'registrations.xlsx', 'Export failed, please try again.');
 
 async function downloadQrPdf(eventId, registrationIds, button) {
   button.disabled = true;
@@ -681,17 +756,19 @@ async function openQrs() {
 
 async function exportAttendance() {
   if (!attendanceDayId) throw new Error('Choose an event day.');
-  const res = await fetch(`/api/admin/attendance/export?event_day_id=${encodeURIComponent(attendanceDayId)}`, { credentials: 'same-origin' });
-  if (res.status === 401) throw Object.assign(new Error('Please log in again.'), { status: 401 });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || 'Attendance export failed.');
-  }
-  const blob = await res.blob();
-  const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'attendance.xlsx';
-  const url = URL.createObjectURL(blob);
-  const link = Object.assign(document.createElement('a'), { href: url, download: filename });
-  document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+  await downloadExport(
+    `/api/admin/attendance/export?event_day_id=${encodeURIComponent(attendanceDayId)}`,
+    'attendance.xlsx', 'Attendance export failed.',
+  );
+}
+
+async function exportQuestions() {
+  if (!questionEventId) throw new Error('Choose an event.');
+  const session = questionSessionId ? `&session_id=${encodeURIComponent(questionSessionId)}` : '';
+  await downloadExport(
+    `/api/admin/questions/export?event_id=${encodeURIComponent(questionEventId)}${session}`,
+    'questions.xlsx', 'Questions export failed.',
+  );
 }
 
 // ---------- events ----------
@@ -703,6 +780,7 @@ document.addEventListener('click', (event) => {
   if (d.tab) {
     Object.assign(view, { tab: d.tab, side: 'all', status: 'all' });
     if (d.tab === 'attendance') guarded(loadAttendanceTab);
+    else if (d.tab === 'questions') guarded(loadQuestionsTab);
     else renderTab({ animate: true });
   } else if (d.chipGroup) {
     view[d.chipGroup] = d.chipValue;
@@ -718,13 +796,23 @@ document.addEventListener('click', (event) => {
   else if (d.merge) openMerge(d.merge);
   else if (d.attendanceDelete) confirmDeleteAttendance(d.attendanceDelete);
   else if ('attendanceExport' in d) guarded(exportAttendance);
+  else if (d.questionDelete) confirmDeleteQuestion(d.questionDelete);
+  else if ('questionsExport' in d) guarded(exportQuestions);
   else if ('close' in d) closeModal();
 });
 
 document.addEventListener('change', (event) => {
-  if (event.target.id !== 'attendance-day') return;
-  attendanceDayId = event.target.value;
-  guarded(loadAttendanceTab);
+  if (event.target.id === 'attendance-day') {
+    attendanceDayId = event.target.value;
+    guarded(loadAttendanceTab);
+  } else if (event.target.id === 'questions-event') {
+    questionEventId = event.target.value;
+    questionSessionId = '';
+    guarded(loadQuestionsTab);
+  } else if (event.target.id === 'questions-session') {
+    questionSessionId = event.target.value;
+    renderTab({ animate: true });
+  }
 });
 
 $('#search').addEventListener('input', (event) => {
@@ -758,6 +846,8 @@ $('#logout').addEventListener('click', async () => {
   data = null;
   attendanceDays = null;
   attendanceData = null;
+  questionEvents = null;
+  questionsData = null;
   showLogin();
 });
 

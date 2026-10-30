@@ -15,6 +15,9 @@ import {
   attendanceFilename, buildAttendanceWorkbook, checkIn, deleteAttendance, listAttendanceDays,
   loadAttendance,
 } from '../services/attendance.js';
+import {
+  buildQuestionsWorkbook, deleteQuestion, loadQuestions, questionsFilename,
+} from '../services/questions.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -123,6 +126,30 @@ export function adminRoutes({ db, config, loginDelayMs }) {
       'Cache-Control': 'no-store',
     });
     res.send(Buffer.from(buffer));
+  });
+
+  // The event list for this tab is /qr-events: it already returns every event, newest and most
+  // active first, which is the same choice an administrator makes here.
+  router.get('/questions', async (req, res) => {
+    const data = await loadQuestions(db, req.query.event_id);
+    res.set('Cache-Control', 'no-store');
+    res.json(data);
+  });
+
+  router.get('/questions/export', async (req, res) => {
+    const data = await loadQuestions(db, req.query.event_id, req.query.session_id);
+    const buffer = await buildQuestionsWorkbook(data).xlsx.writeBuffer();
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${questionsFilename(data)}"`,
+      'Cache-Control': 'no-store',
+    });
+    res.send(Buffer.from(buffer));
+  });
+
+  router.delete('/questions/:id', async (req, res) => {
+    await deleteQuestion(db, req.params.id);
+    res.json({ ok: true });
   });
 
   router.post('/events/:id/qrs.pdf', async (req, res) => {

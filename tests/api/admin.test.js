@@ -32,6 +32,9 @@ const protectedRoutes = [
   ['delete', '/api/admin/attendance'],
   ['post', '/api/admin/organisations/1/approve'],
   ['post', '/api/admin/organisations/1/merge'],
+  ['get', `/api/admin/questions?event_id=${PERSON_ID}`],
+  ['get', `/api/admin/questions/export?event_id=${PERSON_ID}`],
+  ['delete', `/api/admin/questions/${PERSON_ID}`],
 ];
 
 test('protected admin routes return 401 without a valid cookie and never touch the database', async () => {
@@ -339,4 +342,48 @@ test('DELETE /attendance reports NOT_FOUND when the check-in is already gone', a
   assert.equal(res.body.error, 'NOT_FOUND');
   // An unmatched /api path is also a 404 NOT_FOUND, so only the call proves the route ran.
   assert.ok(db.calls.some((call) => call.fn === 'delete_attendance'));
+});
+
+test('GET /questions rejects an event id that is not a uuid and never touches the database', async () => {
+  const db = fakeDb();
+  for (const query of ['', '?event_id=nope']) {
+    const res = await request(appWith(db)).get(`/api/admin/questions${query}`).set('Cookie', validCookie());
+    assert.equal(res.status, 400, query);
+    assert.equal(res.body.error, 'VALIDATION');
+    assert.ok(res.body.fields.event_id);
+  }
+  assert.equal(db.calls.length, 0);
+});
+
+test('GET /questions/export rejects a session id that is not a uuid and never touches the database', async () => {
+  const db = fakeDb();
+  const res = await request(appWith(db))
+    .get(`/api/admin/questions/export?event_id=${PERSON_ID}&session_id=nope`)
+    .set('Cookie', validCookie());
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, 'VALIDATION');
+  assert.ok(res.body.fields.session_id);
+  assert.equal(db.calls.length, 0);
+});
+
+test('GET /questions reports NOT_FOUND for an unknown event', async () => {
+  const db = fakeDb({ tables: { events: { data: [], error: null } } });
+  const res = await request(appWith(db)).get(`/api/admin/questions?event_id=${PERSON_ID}`)
+    .set('Cookie', validCookie());
+  assert.equal(res.status, 404);
+  assert.equal(db.calls.some((call) => call.table === 'session_questions'), false);
+});
+
+test('DELETE /questions rejects an id that is not a uuid and never touches the database', async () => {
+  const db = fakeDb();
+  const res = await request(appWith(db)).delete('/api/admin/questions/nope').set('Cookie', validCookie());
+  assert.equal(res.status, 404);
+  assert.equal(db.calls.length, 0);
+});
+
+test('DELETE /questions reports NOT_FOUND when the question is already gone', async () => {
+  const db = fakeDb({ rpc: { delete_session_question: rpcError('NOT_FOUND') } });
+  const res = await request(appWith(db)).delete(`/api/admin/questions/${PERSON_ID}`).set('Cookie', validCookie());
+  assert.equal(res.status, 404);
+  assert.ok(db.calls.some((call) => call.fn === 'delete_session_question'));
 });

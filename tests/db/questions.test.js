@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import ExcelJS from 'exceljs';
 import request from 'supertest';
 import { createApp } from '../../src/create-app.js';
+import { COOKIE_NAME, signSession } from '../../src/auth.js';
 import { testConfig } from '../helpers/fake-db.js';
 import { createCredential, credentialHash } from '../../src/services/credential.js';
 import { check, payload, pick, register, seedOrgs, skipReason, testDb, wipe } from '../helpers/db.js';
@@ -60,7 +62,7 @@ describe('session questions', { skip: skipReason }, () => {
       p_source: 'online',
     }));
     fixture = {
-      attendeeId, event, days, registration, credential,
+      attendeeId, event, days, registration, credential, factoryId: factory.id,
       session: sessions.find((row) => row.position === 1),
       brk: sessions.find((row) => row.position === 2),
       dayTwoSession: sessions.find((row) => row.position === 3),
@@ -430,5 +432,89 @@ describe('session questions', { skip: skipReason }, () => {
 
   test('a missing session id is rejected', async () => {
     await post({ credential: fixture.credential.token, body: 'A real question' }).expect(400);
+  });
+  // --- admin API: reading and deleting what was asked ---
+
+  const binary = (res, callback) => {
+    const chunks = [];
+    res.on('data', (chunk) => chunks.push(chunk));
+    res.on('end', () => callback(null, Buffer.concat(chunks)));
+  };
+  const adminCookie = () => `${COOKIE_NAME}=${signSession(testConfig.sessionSecret)}`;
+  const adminGet = (path) => request(app()).get(path).set('Cookie', adminCookie());
+  const listQuestions = (eventId = fixture.event.id) => adminGet(`/api/admin/questions?event_id=${eventId}`);
+
+  // The organisation shown is the snapshot taken when the person was registered for the event,
+  // which the fixture does not create, so this test adds it.
+  const snapshotOrg = () => check(db.from('registration_orgs').insert({
+    registration_id: fixture.registration.id,
+    org_id: fixture.factoryId,
+    kind: 'factory',
+    name: 'Questions Test Factory',
+    code: 'QT-1',
+  }));
+
+  test('the admin list carries each question with its session and asker, newest first', async () => {
+    await snapshotOrg();
+    await check(ask(fixture.session.id, 'First question'));
+    await check(backdate(5));
+    await check(ask(fixture.dayTwoSession.id, 'Second question'));
+    const res = await listQuestions().expect(200);
+    assert.equal(res.headers['cache-control'], 'no-store');
+    assert.equal(res.body.event.id, fixture.event.id);
+    assert.deepEqual(res.body.rows.map((row) => row.body), ['Second question', 'First question']);
+    const [newest] = res.body.rows;
+    assert.equal(newest.session_title, 'Second Day Session');
+    assert.equal(newest.name, 'Test Person');
+    assert.equal(newest.organisation, 'Questions Test Factory');
+    assert.equal(newest.email, 'questions@example.test');
+    assert.ok(newest.asked_at);
+  });
+
+  test('the admin list holds only the questions of the event asked for', async () => {
+    await check(ask(fixture.session.id, 'Belongs to this event'));
+    const [other] = await check(db.from('events').insert({
+      code: 'admin-other', name: 'Admin Other', status: 'open',
+    }).select('id'));
+    await check(db.from('event_sessions').insert({
+      event_id: other.id, position: 1, title: 'Elsewhere', kind: 'session',
+      starts_at: '2030-01-01T03:30:00Z', ends_at: '2030-01-01T04:00:00Z',
+    }));
+    assert.equal((await listQuestions().expect(200)).body.rows.length, 1);
+    assert.deepEqual((await listQuestions(other.id).expect(200)).body.rows, []);
+  });
+
+  test('deleting a question removes it from the list and leaves the rest', async () => {
+    const first = await check(ask(fixture.session.id, 'First question'));
+    await check(backdate(5));
+    await check(ask(fixture.session.id, 'Second question'));
+    await request(app()).delete(`/api/admin/questions/${first.question_id}`)
+      .set('Cookie', adminCookie()).expect(200);
+    const res = await listQuestions().expect(200);
+    assert.deepEqual(res.body.rows.map((row) => row.body), ['Second question']);
+  });
+
+  test('the export is a workbook named after the event, holding every question', async () => {
+    await snapshotOrg();
+    await check(ask(fixture.session.id, 'Exported question'));
+    const res = await adminGet(`/api/admin/questions/export?event_id=${fixture.event.id}`)
+      .buffer(true).parse(binary).expect(200);
+    assert.match(res.headers['content-type'], /spreadsheetml/);
+    assert.equal(res.headers['content-disposition'], 'attachment; filename="questions-test-questions.xlsx"');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(res.body);
+    const sheet = workbook.getWorksheet('Questions');
+    assert.equal(sheet.rowCount, 2); // header plus the one question
+    // Column keys are not stored in the file, so a loaded sheet is read by position.
+    assert.deepEqual(sheet.getRow(1).values.slice(1, 4), ['Question', 'Session', '#']);
+    assert.equal(sheet.getRow(2).getCell(1).value, 'Exported question');
+    assert.equal(sheet.getRow(2).getCell(7).value, 'Questions Test Factory');
+
+    // Filtering by session narrows the same workbook to that session's questions.
+    const filtered = await adminGet(`/api/admin/questions/export?event_id=${fixture.event.id}&session_id=${fixture.brk.id}`)
+      .buffer(true).parse(binary).expect(200);
+    const narrowed = new ExcelJS.Workbook();
+    await narrowed.xlsx.load(filtered.body);
+    assert.equal(narrowed.getWorksheet('Questions').rowCount, 1);
   });
 });

@@ -25,6 +25,7 @@ The repository includes registration, online mobile scanning, attendance reporti
 - Stable per-attendee QR codes with individual view/download and multi-select or bulk PDF printing.
 - Public QR verification showing the attendee photo, name, designation, supplier/factory or other organisation, email, and attending side.
 - Attendance dashboard, live refresh, and day-specific Excel export.
+- Session Q&A: checked-in attendees ask from their QR verification page; admins review, export, and delete questions per event.
 
 ### Not implemented
 
@@ -192,6 +193,9 @@ For full organisations, the public catalogue exposes only registrant name/design
 | `POST` | `/api/admin/attendance/check-in` | Verify QR/fallback and record attendance |
 | `GET` | `/api/admin/attendance?event_day_id=…` | Day roster and attendance summary |
 | `GET` | `/api/admin/attendance/export?event_day_id=…` | Day-specific Excel export |
+| `GET` | `/api/admin/questions?event_id=…` | Event questions with session and asker |
+| `GET` | `/api/admin/questions/export?event_id=…` | Questions Excel export |
+| `DELETE` | `/api/admin/questions/:id` | Delete a question |
 | `GET` | `/api/admin/participants/:id/photo` | Private photo |
 | `POST` | `/api/admin/participants` | Add a participant without public seat limits |
 | `PUT` | `/api/admin/participants/:id` | Update participant |
