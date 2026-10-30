@@ -107,4 +107,41 @@ describe('credentials and attendance', { skip: skipReason }, () => {
     await check(db.from('events').update({ status: 'closed' }).eq('id', fixture.event.id));
     assert.equal((await check(scan(fixture.credential.tokenHash, fixture.days[0].id))).status, 'OUTSIDE_CHECKIN_WINDOW');
   });
+  test('delete_attendance removes the row for that registration and day', async () => {
+    await check(scan(fixture.credential.tokenHash, fixture.days[0].id));
+    assert.equal((await check(db.from('attendance').select('id').eq('event_day_id', fixture.days[0].id))).length, 1);
+    await check(db.rpc('delete_attendance', {
+      p_registration_id: fixture.registration.id,
+      p_event_day_id: fixture.days[0].id,
+    }));
+    assert.equal((await check(db.from('attendance').select('id').eq('event_day_id', fixture.days[0].id))).length, 0);
+  });
+
+  test('delete_attendance leaves another day untouched', async () => {
+    await check(scan(fixture.credential.tokenHash, fixture.days[0].id));
+    await check(scan(fixture.credential.tokenHash, fixture.days[1].id));
+    await check(db.rpc('delete_attendance', {
+      p_registration_id: fixture.registration.id,
+      p_event_day_id: fixture.days[0].id,
+    }));
+    const remaining = await check(db.from('attendance').select('event_day_id'));
+    assert.deepEqual(remaining.map((row) => row.event_day_id), [fixture.days[1].id]);
+  });
+
+  test('delete_attendance raises NOT_FOUND when there is no check-in to delete', async () => {
+    const { error } = await db.rpc('delete_attendance', {
+      p_registration_id: fixture.registration.id,
+      p_event_day_id: fixture.days[0].id,
+    });
+    assert.equal(error?.message, 'NOT_FOUND');
+  });
+
+  test('a deleted check-in can be scanned again', async () => {
+    await check(scan(fixture.credential.tokenHash, fixture.days[0].id));
+    await check(db.rpc('delete_attendance', {
+      p_registration_id: fixture.registration.id,
+      p_event_day_id: fixture.days[0].id,
+    }));
+    assert.equal((await check(scan(fixture.credential.tokenHash, fixture.days[0].id))).status, 'CHECKED_IN');
+  });
 });
