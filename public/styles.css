@@ -977,6 +977,10 @@ dialog::backdrop { background: rgba(0, 43, 97, 0.35); backdrop-filter: blur(4px)
 .qr-preview-image { display: block; width: min(100%, 420px); height: auto; margin: 10px auto; }
 
 /* Compact admin-only participant form. */
+.admin-add-form .reg-form,
+.admin-add-form .field > label,
+.admin-add-form .field > legend,
+.admin-add-form .sub-card h3 { text-align: left; }
 .admin-add-form .field { margin-bottom: 14px; }
 .admin-add-form .field > label,
 .admin-add-form .field > legend { margin-bottom: 6px; }

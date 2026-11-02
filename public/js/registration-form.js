@@ -31,10 +31,12 @@ let nextKey = 0;
  *   requireFullName false accepts a single-part admin-entered name when otherwise valid
  *   keepOrgPickerOpen true keeps the organisation list open while several are selected
  *   optionalFields true removes required markers and permits an admin placeholder participant
+ *   alwaysShowListedOrgPickers true keeps the supplier/factory pickers visible before a type is selected
  */
 export function mountRegistrationForm(container, {
   orgs, initial = null, submitLabel = 'Register', onSubmit, reloadOrgs = null,
   showSeatStatus = true, requireFullName = true, keepOrgPickerOpen = false, optionalFields = false,
+  alwaysShowListedOrgPickers = false,
 }) {
   const uid = ++nextKey;
   let orgList = orgs;
@@ -287,7 +289,8 @@ export function mountRegistrationForm(container, {
   function render() {
     const own = ownSeatIds();
     const isOther = state.fromType === 'other';
-    form.querySelector('[data-kind-sections]').hidden = !state.fromType || isOther;
+    form.querySelector('[data-kind-sections]').hidden = isOther
+      || (!state.fromType && !alwaysShowListedOrgPickers);
     form.querySelector('[data-other-org]').hidden = !isOther;
 
     for (const { kind, label } of KINDS) {

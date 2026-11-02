@@ -377,6 +377,7 @@ function openAddParticipant() {
     requireFullName: false,
     keepOrgPickerOpen: true,
     optionalFields: true,
+    alwaysShowListedOrgPickers: true,
     onSubmit: async (payload) => {
       try {
         await api('/api/admin/participants', { method: 'POST', body: payload });
