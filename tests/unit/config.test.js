@@ -18,6 +18,7 @@ test('returns a config object when every variable is set', () => {
     adminPassword: 'pw',
     sessionSecret: 'a'.repeat(32),
     eventTitle: 'Supplier Day',
+    publicBaseUrl: '',
     powerAutomateWebhookUrl: '',
     isProduction: false,
     maintenanceMode: false,
@@ -25,6 +26,17 @@ test('returns a config object when every variable is set', () => {
     httpsKeyPath: '',
     httpsCertPath: '',
   });
+});
+
+test('normalises an optional public QR base URL to its origin', () => {
+  assert.equal(
+    loadConfig({ ...valid, PUBLIC_BASE_URL: ' https://registration.pac-d.com/path ' }).publicBaseUrl,
+    'https://registration.pac-d.com',
+  );
+  assert.throws(
+    () => loadConfig({ ...valid, PUBLIC_BASE_URL: 'not-a-url' }),
+    /valid HTTP\(S\) origin/,
+  );
 });
 
 test('the Power Automate webhook URL is optional and trimmed', () => {

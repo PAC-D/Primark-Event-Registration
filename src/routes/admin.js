@@ -49,6 +49,7 @@ function dropPhoto(db, path, context) {
 
 export function adminRoutes({ db, config, loginDelayMs }) {
   const router = Router();
+  const qrBaseUrl = (req) => config.publicBaseUrl || `${req.protocol}://${req.get('host')}`;
 
   router.post('/login', async (req, res) => {
     if (!passwordMatches(req.body?.password, config.adminPassword)) {
@@ -82,7 +83,7 @@ export function adminRoutes({ db, config, loginDelayMs }) {
     }
     if (includeQr && event) {
       const result = await generateQrImages(db, event.id, {
-        baseUrl: `${req.protocol}://${req.get('host')}`,
+        baseUrl: qrBaseUrl(req),
       });
       qrImages = result?.images?.map((png, index) => ({
         attendeeId: result.registrations[index].attendeeId,
@@ -181,7 +182,7 @@ export function adminRoutes({ db, config, loginDelayMs }) {
       }
       registrationIds = req.body.registration_ids;
     }
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = qrBaseUrl(req);
     const batch = await prepareQrPdfStream(db, eventId, {
       registrationIds,
       baseUrl,
@@ -200,7 +201,7 @@ export function adminRoutes({ db, config, loginDelayMs }) {
   router.post('/events/:id/qrs.zip', async (req, res) => {
     const eventId = participantId(req.params.id);
     const batch = await generateQrZip(db, eventId, {
-      baseUrl: `${req.protocol}://${req.get('host')}`,
+      baseUrl: qrBaseUrl(req),
     });
     if (!batch) throw errors.notFound();
     if (batch.empty) throw errors.conflict('This event has no confirmed registrations to download.');
@@ -216,7 +217,7 @@ export function adminRoutes({ db, config, loginDelayMs }) {
   router.post('/events/:id/qr.png', async (req, res) => {
     const eventId = participantId(req.params.id);
     const registrationId = participantId(req.body?.registration_id);
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = qrBaseUrl(req);
     const result = await generateQrPng(db, eventId, {
       registrationId,
       baseUrl,

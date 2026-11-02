@@ -6,6 +6,7 @@ import {
   generateQrPdf, generateQrPng, generateQrZip, prepareQrPdfStream,
   qrPdfFilename, qrPngFilename, qrZipFilename,
 } from '../../src/services/qr.js';
+import { createCredential } from '../../src/services/credential.js';
 import { fakeDb } from '../helpers/fake-db.js';
 
 test('QR downloads use safe filenames', () => {
@@ -25,10 +26,8 @@ test('generates a plain QR PNG and a one-page QR PDF', async () => {
         attendees: { id: 'attendee-1', name: 'Aminul Islam', from_type: 'other', organisation_name: 'Example' },
         registration_orgs: [],
       }], error: null },
-    },
-    rpc: {
-      prepare_event_credentials: ({ p_items: items }) => ({
-        data: items.map((item) => ({ ...item, issued: true })), error: null,
+      registration_credentials: ({ operation, payload }) => ({
+        data: operation === 'insert' ? [payload] : [], error: null,
       }),
     },
   });
@@ -64,10 +63,8 @@ test('bulk ZIP rendering is bounded to four QR images at a time', async () => {
     tables: {
       events: { data: [{ id: eventId, code: 'event-2026', name: 'Event 2026' }], error: null },
       event_registrations: { data: registrations, error: null },
-    },
-    rpc: {
-      prepare_event_credentials: ({ p_items: items }) => ({
-        data: items.map((item) => ({ ...item, issued: true })), error: null,
+      registration_credentials: ({ operation, payload }) => ({
+        data: operation === 'insert' ? [payload] : [], error: null,
       }),
     },
   });
@@ -87,4 +84,106 @@ test('bulk ZIP rendering is bounded to four QR images at a time', async () => {
   const zip = await JSZip.loadAsync(result.zip);
   assert.equal(Object.keys(zip.files).length, registrations.length);
   assert.equal(maximumActive, 4);
+});
+
+test('existing printable credentials render without calling the preparation RPC', async () => {
+  const eventId = '11111111-1111-4111-8111-111111111111';
+  const registrationId = '22222222-2222-4222-8222-222222222222';
+  const credential = createCredential({ tokenBytes: Buffer.alloc(24, 7), fallbackBytes: Buffer.alloc(8, 8) });
+  const db = fakeDb({
+    tables: {
+      events: { data: [{ id: eventId, code: 'event-2026', name: 'Event 2026' }], error: null },
+      event_registrations: { data: [{
+        id: registrationId,
+        attendees: { id: 'attendee-1', name: 'Aminul Islam', from_type: 'other', organisation_name: 'Example' },
+        registration_orgs: [],
+      }], error: null },
+      registration_credentials: { data: [{
+        registration_id: registrationId,
+        token_hash: credential.tokenHash,
+        fallback_code_hash: credential.fallbackHash,
+        print_token: credential.token,
+        fallback_code: credential.fallback,
+        status: 'active',
+      }], error: null },
+    },
+    rpc: {
+      prepare_event_credentials: () => { throw new Error('preparation RPC must not run'); },
+    },
+  });
+  const result = await generateQrPng(db, eventId, {
+    registrationId,
+    baseUrl: 'https://registration.pac-d.com',
+  });
+  assert.equal(result.png.subarray(1, 4).toString(), 'PNG');
+  assert.equal(db.calls.some((call) => call.op === 'insert'), false);
+});
+
+test('new registrations receive permanent printable credentials without the preparation RPC', async () => {
+  const eventId = '11111111-1111-4111-8111-111111111111';
+  const registrationId = '22222222-2222-4222-8222-222222222222';
+  const db = fakeDb({
+    tables: {
+      events: { data: [{ id: eventId, code: 'event-2026', name: 'Event 2026' }], error: null },
+      event_registrations: { data: [{
+        id: registrationId,
+        attendees: { id: 'attendee-1', name: 'Dummy User', from_type: 'other', organisation_name: 'Placeholder' },
+        registration_orgs: [],
+      }], error: null },
+      registration_credentials: ({ operation, payload }) => ({
+        data: operation === 'insert' ? [payload] : [], error: null,
+      }),
+    },
+    rpc: {
+      prepare_event_credentials: () => { throw new Error('preparation RPC must not run'); },
+    },
+  });
+
+  const result = await generateQrPng(db, eventId, {
+    registrationId,
+    baseUrl: 'https://registration.pac-d.com',
+  });
+
+  const insertion = db.calls.find((call) => call.op === 'insert');
+  assert.equal(result.png.subarray(1, 4).toString(), 'PNG');
+  assert.equal(insertion.payload.registration_id, registrationId);
+  assert.match(insertion.payload.print_token, /^ER1\.[A-Za-z0-9_-]{32}$/);
+  assert.equal(db.calls.some((call) => call.fn === 'prepare_event_credentials'), false);
+});
+
+test('legacy active credentials missing printable values are repaired in place', async () => {
+  const eventId = '11111111-1111-4111-8111-111111111111';
+  const registrationId = '22222222-2222-4222-8222-222222222222';
+  const legacy = {
+    registration_id: registrationId,
+    token_hash: '1'.repeat(64),
+    fallback_code_hash: '2'.repeat(64),
+    print_token: null,
+    fallback_code: null,
+    status: 'active',
+  };
+  const db = fakeDb({
+    tables: {
+      events: { data: [{ id: eventId, code: 'event-2026', name: 'Event 2026' }], error: null },
+      event_registrations: { data: [{
+        id: registrationId,
+        attendees: { id: 'attendee-1', name: 'Legacy User', from_type: 'other', organisation_name: 'Placeholder' },
+        registration_orgs: [],
+      }], error: null },
+      registration_credentials: ({ operation, payload }) => {
+        if (operation !== 'update') return { data: [legacy], error: null };
+        return { data: [{ ...legacy, ...payload }], error: null };
+      },
+    },
+  });
+
+  const result = await generateQrPng(db, eventId, {
+    registrationId,
+    baseUrl: 'https://registration.pac-d.com',
+  });
+
+  const repair = db.calls.find((call) => call.op === 'update');
+  assert.equal(result.png.subarray(1, 4).toString(), 'PNG');
+  assert.match(repair.payload.print_token, /^ER1\.[A-Za-z0-9_-]{32}$/);
+  assert.equal(db.calls.some((call) => call.op === 'insert'), false);
 });

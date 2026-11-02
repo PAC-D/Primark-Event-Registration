@@ -78,7 +78,7 @@ src/
   errors.js                  Stable API error mapping
   routes/                    Public, photo, and admin endpoints
   services/                  Dashboard, attendance, export, import, notification, photos
-supabase/migrations/         Ordered migrations 001–016
+supabase/migrations/         Ordered migrations 001–017
 scripts/
   apply-migration.js         Apply named SQL migrations through DATABASE_URL
   import-orgs.js             Organisation import entry point
@@ -218,6 +218,7 @@ Copy `.env.example` to `.env`.
 | `ADMIN_PASSWORD` | Yes | Shared admin password |
 | `SESSION_SECRET` | Yes | At least 32 characters; signs cookies |
 | `EVENT_TITLE` | Yes | Interface event subtitle |
+| `PUBLIC_BASE_URL` | No | Public origin encoded in QR codes; set this when generating production QRs locally |
 | `MAINTENANCE_MODE` | No | `true/1/yes/on` enables maintenance |
 | `POWER_AUTOMATE_WEBHOOK_URL` | No | Confirmation webhook |
 | `PORT` | No | HTTP port; default 3000 |
@@ -235,7 +236,7 @@ Never commit `.env`, secret keys, webhook URLs, database exports, or attendee da
 
 ## Local development
 
-Requirements: Node.js 24, a development Supabase project, and migrations `001–016`.
+Requirements: Node.js 24, a development Supabase project, and migrations `001–017`.
 
 ```bash
 npm install

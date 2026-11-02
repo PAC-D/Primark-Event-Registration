@@ -287,7 +287,7 @@ export function mountRegistrationForm(container, {
   function render() {
     const own = ownSeatIds();
     const isOther = state.fromType === 'other';
-    form.querySelector('[data-kind-sections]').hidden = isOther;
+    form.querySelector('[data-kind-sections]').hidden = !state.fromType || isOther;
     form.querySelector('[data-other-org]').hidden = !isOther;
 
     for (const { kind, label } of KINDS) {

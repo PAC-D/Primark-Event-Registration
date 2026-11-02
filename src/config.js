@@ -14,12 +14,23 @@ export function loadConfig(env = process.env) {
   if (Boolean(httpsKeyPath) !== Boolean(httpsCertPath)) {
     throw new Error('HTTPS_KEY_PATH and HTTPS_CERT_PATH must be set together');
   }
+  let publicBaseUrl = (env.PUBLIC_BASE_URL ?? '').trim();
+  if (publicBaseUrl) {
+    try {
+      const url = new URL(publicBaseUrl);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error();
+      publicBaseUrl = url.origin;
+    } catch {
+      throw new Error('PUBLIC_BASE_URL must be a valid HTTP(S) origin');
+    }
+  }
   return {
     supabaseUrl: env.SUPABASE_URL.trim(),
     supabaseSecretKey: env.SUPABASE_SECRET_KEY.trim(),
     adminPassword: env.ADMIN_PASSWORD,
     sessionSecret: env.SESSION_SECRET,
     eventTitle: env.EVENT_TITLE.trim(),
+    publicBaseUrl,
     // Optional: Power Automate webhook trigger URL for confirmation emails. Empty = emails disabled.
     powerAutomateWebhookUrl: (env.POWER_AUTOMATE_WEBHOOK_URL ?? '').trim(),
     isProduction: env.NODE_ENV === 'production' || Boolean(env.VERCEL),

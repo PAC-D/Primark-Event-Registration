@@ -32,9 +32,23 @@ export function fakeDb({ rpc = {}, tables = {} } = {}) {
     from(table) {
       calls.push({ table });
       const result = tables[table] ?? { data: [], error: null };
+      const state = { operation: 'select', payload: undefined };
       const request = {
         select: () => request,
+        insert: (payload) => {
+          state.operation = 'insert';
+          state.payload = payload;
+          calls.push({ table, op: 'insert', payload });
+          return request;
+        },
+        update: (payload) => {
+          state.operation = 'update';
+          state.payload = payload;
+          calls.push({ table, op: 'update', payload });
+          return request;
+        },
         eq: () => request,
+        is: () => request,
         or: () => request,
         is: () => request,
         gte: () => request,
@@ -50,7 +64,7 @@ export function fakeDb({ rpc = {}, tables = {} } = {}) {
               .then(resolve, reject),
         }),
         then: (resolve, reject) =>
-          Promise.resolve(typeof result === 'function' ? result() : result).then(resolve, reject),
+          Promise.resolve(typeof result === 'function' ? result(state) : result).then(resolve, reject),
       };
       return request;
     },

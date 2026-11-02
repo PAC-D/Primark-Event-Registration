@@ -53,10 +53,8 @@ test('GET /api/admin/export?include_qr=1 embeds participant QR images', async ()
         attendees: { id: 'a1', name: 'Rahim Uddin', from_type: 'factory', organisation_name: null },
         registration_orgs: [{ kind: 'factory', name: 'Aspire Garments' }],
       }], error: null },
-    },
-    rpc: {
-      prepare_event_credentials: ({ p_items: items }) => ({
-        data: items.map((item) => ({ ...item, issued: true })), error: null,
+      registration_credentials: ({ operation, payload }) => ({
+        data: operation === 'insert' ? [payload] : [], error: null,
       }),
     },
   });

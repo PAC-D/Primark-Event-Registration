@@ -2,7 +2,7 @@ import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 import JSZip from 'jszip';
 import { finished } from 'node:stream/promises';
-import { callRpc, runQuery } from '../db.js';
+import { runQuery } from '../db.js';
 import {
   createCredential, credentialHash, normaliseFallbackCode,
 } from './credential.js';
@@ -138,11 +138,44 @@ async function prepareBatch(db, eventId, { registrationIds } = {}) {
   if (registrationIds?.length && batch.registrations.length !== registrationIds.length) {
     return { ...batch, invalidSelection: true };
   }
-  const prepared = await callRpc(db, 'prepare_event_credentials', {
-    p_event_id: eventId,
-    p_items: batch.registrations.map((registration) => candidate(registration)),
-  });
-  const byRegistration = new Map(prepared.map((row) => [row.registration_id, row]));
+  const ids = batch.registrations.map((registration) => registration.registrationId);
+  const existing = await runQuery(db.from('registration_credentials')
+    .select('registration_id, token_hash, fallback_code_hash, print_token, fallback_code')
+    .in('registration_id', ids)
+    .eq('status', 'active'));
+  const byRegistration = new Map(existing
+    .filter((row) => row.print_token && row.fallback_code)
+    .map((row) => [row.registration_id, row]));
+  const missing = batch.registrations.filter((registration) => !byRegistration.has(registration.registrationId));
+  if (missing.length) {
+    const activeIds = new Set(existing.map((row) => row.registration_id));
+    const prepared = await Promise.all(missing.map(async (registration) => {
+      const values = candidate(registration);
+      if (!activeIds.has(registration.registrationId)) {
+        const rows = await runQuery(db.from('registration_credentials')
+          .insert(values)
+          .select('registration_id, token_hash, fallback_code_hash, print_token, fallback_code'));
+        return rows[0];
+      }
+      const rows = await runQuery(db.from('registration_credentials')
+        .update({
+          token_hash: values.token_hash,
+          fallback_code_hash: values.fallback_code_hash,
+          print_token: values.print_token,
+          fallback_code: values.fallback_code,
+        })
+        .eq('registration_id', registration.registrationId)
+        .eq('status', 'active')
+        .is('print_token', null)
+        .is('fallback_code', null)
+        .select('registration_id, token_hash, fallback_code_hash, print_token, fallback_code'));
+      return rows[0];
+    }));
+    prepared.forEach((row) => {
+      if (!row) throw new Error('QR credential was changed by another request. Please try again.');
+      byRegistration.set(row.registration_id, row);
+    });
+  }
   return {
     ...batch,
     credentials: batch.registrations.map((registration) => recover(byRegistration.get(registration.registrationId))),
