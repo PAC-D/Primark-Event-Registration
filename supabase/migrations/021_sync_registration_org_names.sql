@@ -46,4 +46,3 @@ select er.id, o.id, o.kind, o.name, ao.code
   join public.organisations o on o.id = ao.org_id
 on conflict (registration_id, kind, name)
 do update set org_id = excluded.org_id, code = excluded.code;
-
