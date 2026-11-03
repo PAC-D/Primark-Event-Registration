@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import JSZip from 'jszip';
 import { finished } from 'node:stream/promises';
 import { runQuery } from '../db.js';
+import { errors } from '../errors.js';
 import {
   createCredential, credentialHash, normaliseFallbackCode,
 } from './credential.js';
@@ -143,36 +144,29 @@ async function prepareBatch(db, eventId, { registrationIds } = {}) {
     .select('registration_id, token_hash, fallback_code_hash, print_token, fallback_code')
     .in('registration_id', ids)
     .eq('status', 'active'));
-  const byRegistration = new Map(existing
-    .filter((row) => row.print_token && row.fallback_code)
-    .map((row) => [row.registration_id, row]));
+  const byRegistration = new Map(existing.map((row) => [row.registration_id, row]));
+  const unprintable = batch.registrations.filter((registration) => {
+    const row = byRegistration.get(registration.registrationId);
+    return row && (!row.print_token || !row.fallback_code);
+  });
+  if (unprintable.length) {
+    const names = unprintable.map((registration) => registration.name).join(', ');
+    throw errors.conflict(
+      `The original QR credential for ${names} cannot be reproduced from its stored hash. `
+      + 'Use the previously downloaded QR; it remains valid for scanning.',
+    );
+  }
   const missing = batch.registrations.filter((registration) => !byRegistration.has(registration.registrationId));
   if (missing.length) {
-    const activeIds = new Set(existing.map((row) => row.registration_id));
     const prepared = await Promise.all(missing.map(async (registration) => {
       const values = candidate(registration);
-      if (!activeIds.has(registration.registrationId)) {
-        const rows = await runQuery(db.from('registration_credentials')
-          .insert(values)
-          .select('registration_id, token_hash, fallback_code_hash, print_token, fallback_code'));
-        return rows[0];
-      }
       const rows = await runQuery(db.from('registration_credentials')
-        .update({
-          token_hash: values.token_hash,
-          fallback_code_hash: values.fallback_code_hash,
-          print_token: values.print_token,
-          fallback_code: values.fallback_code,
-        })
-        .eq('registration_id', registration.registrationId)
-        .eq('status', 'active')
-        .is('print_token', null)
-        .is('fallback_code', null)
+        .insert(values)
         .select('registration_id, token_hash, fallback_code_hash, print_token, fallback_code'));
       return rows[0];
     }));
     prepared.forEach((row) => {
-      if (!row) throw new Error('QR credential was changed by another request. Please try again.');
+      if (!row) throw new Error('QR credential could not be created. Please try again.');
       byRegistration.set(row.registration_id, row);
     });
   }

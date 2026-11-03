@@ -59,6 +59,8 @@ export function fromDbError(error) {
         { count },
       );
     }
+    case 'IMMUTABLE_CREDENTIAL':
+      return errors.conflict('This registration already has a permanent QR credential.');
     default: {
       // supabase-js reports network failures with an empty code.
       if (!error?.code || RETRYABLE_PG_CODES.has(error.code)) {

@@ -20,6 +20,13 @@ test('DUPLICATE_EMAIL becomes 409 with the spec message', () => {
   assert.equal(err.message, 'This email is already registered. Contact the event team to change it.');
 });
 
+test('IMMUTABLE_CREDENTIAL becomes a permanent-QR conflict', () => {
+  const err = fromDbError(dbError('IMMUTABLE_CREDENTIAL'));
+  assert.equal(err.status, 409);
+  assert.equal(err.code, 'CONFLICT');
+  assert.equal(err.message, 'This registration already has a permanent QR credential.');
+});
+
 test('MERGE_OVER_LIMIT becomes 409 with the projected count and per-kind limit', () => {
   const err = fromDbError(dbError('MERGE_OVER_LIMIT', JSON.stringify({ target: 'PADMA TEXTILES LTD', side: 'supplier', count: 3 })));
   assert.equal(err.status, 409);

@@ -151,7 +151,7 @@ test('new registrations receive permanent printable credentials without the prep
   assert.equal(db.calls.some((call) => call.fn === 'prepare_event_credentials'), false);
 });
 
-test('legacy active credentials missing printable values are repaired in place', async () => {
+test('legacy active credentials missing printable values are never replaced', async () => {
   const eventId = '11111111-1111-4111-8111-111111111111';
   const registrationId = '22222222-2222-4222-8222-222222222222';
   const legacy = {
@@ -170,20 +170,18 @@ test('legacy active credentials missing printable values are repaired in place',
         attendees: { id: 'attendee-1', name: 'Legacy User', from_type: 'other', organisation_name: 'Placeholder' },
         registration_orgs: [],
       }], error: null },
-      registration_credentials: ({ operation, payload }) => {
-        if (operation !== 'update') return { data: [legacy], error: null };
-        return { data: [{ ...legacy, ...payload }], error: null };
-      },
+      registration_credentials: { data: [legacy], error: null },
     },
   });
 
-  const result = await generateQrPng(db, eventId, {
-    registrationId,
-    baseUrl: 'https://registration.pac-d.com',
-  });
+  await assert.rejects(
+    generateQrPng(db, eventId, {
+      registrationId,
+      baseUrl: 'https://registration.pac-d.com',
+    }),
+    (error) => error.code === 'CONFLICT' && /previously downloaded QR/.test(error.message),
+  );
 
-  const repair = db.calls.find((call) => call.op === 'update');
-  assert.equal(result.png.subarray(1, 4).toString(), 'PNG');
-  assert.match(repair.payload.print_token, /^ER1\.[A-Za-z0-9_-]{32}$/);
+  assert.equal(db.calls.some((call) => call.op === 'update'), false);
   assert.equal(db.calls.some((call) => call.op === 'insert'), false);
 });

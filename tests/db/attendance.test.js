@@ -52,22 +52,22 @@ describe('credentials and attendance', { skip: skipReason }, () => {
     assert.equal((await check(db.from('attendance').select('id'))).length, 2);
   });
 
-  test('rotation revokes the old QR while the replacement remains valid', async () => {
+  test('a registration credential cannot be rotated', async () => {
     const replacement = createCredential();
-    await check(db.rpc('issue_registration_credential', {
+    const { error } = await db.rpc('issue_registration_credential', {
       p_registration_id: fixture.registration.id,
       p_token_hash: replacement.tokenHash,
       p_fallback_code_hash: replacement.fallbackHash,
-    }));
-    assert.equal((await check(scan(fixture.credential.tokenHash, fixture.days[0].id))).status, 'REVOKED');
-    assert.equal((await check(scan(replacement.tokenHash, fixture.days[0].id))).status, 'CHECKED_IN');
+    });
+    assert.equal(error?.message, 'IMMUTABLE_CREDENTIAL');
+    assert.equal((await check(scan(fixture.credential.tokenHash, fixture.days[0].id))).status, 'CHECKED_IN');
+    assert.equal((await check(scan(replacement.tokenHash, fixture.days[0].id))).status, 'INVALID');
     const credentials = await check(db.from('registration_credentials').select('status').eq('registration_id', fixture.registration.id));
-    assert.deepEqual(credentials.map((row) => row.status).sort(), ['active', 'revoked']);
+    assert.deepEqual(credentials.map((row) => row.status), ['active']);
   });
 
-  test('print preparation issues once and reuses the same credential on every reprint', async () => {
+  test('print preparation cannot replace a hash-only credential', async () => {
     const first = createCredential();
-    const second = createCredential();
     const prepare = (credential) => db.rpc('prepare_event_credentials', {
       p_event_id: fixture.event.id,
       p_items: [{
@@ -78,13 +78,12 @@ describe('credentials and attendance', { skip: skipReason }, () => {
         fallback_code: credential.fallback,
       }],
     });
-    const firstRows = await check(prepare(first));
-    const secondRows = await check(prepare(second));
-    assert.equal(firstRows[0].issued, true);
-    assert.equal(secondRows[0].issued, false);
-    assert.equal(secondRows[0].token_hash, first.tokenHash);
-    assert.equal(secondRows[0].print_token, first.token);
-    assert.equal(secondRows[0].fallback_code, first.fallback);
+    const { error } = await prepare(first);
+    assert.equal(error?.message, 'IMMUTABLE_CREDENTIAL');
+    const [stored] = await check(db.from('registration_credentials')
+      .select('token_hash, status').eq('registration_id', fixture.registration.id));
+    assert.equal(stored.token_hash, fixture.credential.tokenHash);
+    assert.equal(stored.status, 'active');
   });
 
   test('new attendees automatically join the current event with organisation snapshots', async () => {

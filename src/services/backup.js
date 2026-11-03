@@ -101,6 +101,10 @@ export function renderDatabaseSql({ migrations, tables, generatedAt }) {
     lines.push(`-- ==== ${migration.name} ====`, migration.sql.trimEnd(), '');
   }
 
+  // Logical restores replay rows that may legitimately predate current immutability triggers.
+  // The dump itself is trusted and checksummed; suppress row triggers only for this data block.
+  lines.push('set local session_replication_role = replica;', '');
+
   for (const table of BACKUP_TABLES) {
     const rows = tables[table.name] ?? [];
     lines.push(`-- ==== ${table.name}: ${rows.length} rows ====`);
@@ -116,6 +120,8 @@ export function renderDatabaseSql({ migrations, tables, generatedAt }) {
   }
 
   lines.push(
+    'set local session_replication_role = origin;',
+    '',
     '-- Explicit identity inserts do not advance the sequence.',
     "select setval(pg_get_serial_sequence('public.organisations', 'id'), coalesce((select max(id) from public.organisations), 1), true);",
     '',

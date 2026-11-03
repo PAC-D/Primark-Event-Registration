@@ -107,15 +107,16 @@ describe('session questions', { skip: skipReason }, () => {
     assert.equal(await askStatus(randomUUID()), 'INVALID');
   });
 
-  test('a rotated credential returns REVOKED', async () => {
+  test('credential rotation is rejected and the original keeps working', async () => {
     const replacement = createCredential();
-    await check(db.rpc('issue_registration_credential', {
+    const { error } = await db.rpc('issue_registration_credential', {
       p_registration_id: fixture.registration.id,
       p_token_hash: replacement.tokenHash,
       p_fallback_code_hash: replacement.fallbackHash,
-    }));
-    assert.equal(await askStatus(fixture.session.id), 'REVOKED');
-    assert.equal(await askStatus(fixture.session.id, 'Asked on the new card', replacement.tokenHash), 'ASKED');
+    });
+    assert.equal(error?.message, 'IMMUTABLE_CREDENTIAL');
+    assert.equal(await askStatus(fixture.session.id), 'ASKED');
+    assert.equal(await askStatus(fixture.session.id, 'Asked on an unknown card', replacement.tokenHash), 'INVALID');
   });
 
   test('a cancelled registration returns REVOKED', async () => {

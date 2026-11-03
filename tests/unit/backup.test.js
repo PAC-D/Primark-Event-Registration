@@ -33,6 +33,8 @@ test('database export embeds migrations, rows, and repairs the identity sequence
 
   assert.match(sql, /-- ==== 001_schema\.sql ====/);
   assert.match(sql, /overriding system value values \(7, 'supplier', 'A&B''s'/);
+  assert.match(sql, /set local session_replication_role = replica;/);
+  assert.match(sql, /set local session_replication_role = origin;/);
   assert.match(sql, /select setval\(pg_get_serial_sequence/);
   assert.match(sql, /commit;\n$/);
 });
