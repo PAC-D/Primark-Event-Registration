@@ -47,10 +47,14 @@
         <p class="muted scanner-hint">Point the rear camera at the QR code, or select an image containing it.</p>
         <div id="qr-reader" class="qr-reader"></div>
         <details class="manual-scan">
-          <summary>Enter fallback code manually</summary>
+          <summary>Check in by attendee name</summary>
           <form id="manual-form">
-            <div class="field"><label for="manual-code">Code printed below QR</label><input id="manual-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-EFGH-JKLM"></div>
-            <button class="btn primary scanner-main-button" type="submit">Verify and check in</button>
+            <div class="field manual-attendee-field">
+              <label for="manual-name">Attendee name</label>
+              <input id="manual-name" type="search" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Type a name..." role="combobox" aria-autocomplete="list" aria-controls="manual-results" aria-expanded="false">
+              <div id="manual-results" class="manual-results" role="listbox" hidden></div>
+            </div>
+            <button class="btn primary scanner-main-button" id="manual-submit" type="submit" disabled>Verify and check in</button>
           </form>
         </details>
       </section>

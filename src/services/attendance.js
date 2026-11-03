@@ -43,6 +43,36 @@ export async function checkIn(db, body) {
   return { ...result, email: attendees[0]?.email || '' };
 }
 
+export function validateManualCheckIn(body = {}) {
+  const registrationId = String(body.registration_id ?? '');
+  const eventDayId = String(body.event_day_id ?? '');
+  const scanId = String(body.scan_id ?? '');
+  const deviceId = String(body.device_id ?? '').trim();
+  const scannedAt = new Date(body.scanned_at_device);
+  const fields = {};
+  if (!UUID_RE.test(registrationId)) fields.registration_id = 'Select an attendee.';
+  if (!UUID_RE.test(eventDayId)) fields.event_day_id = 'Choose an event day.';
+  if (!UUID_RE.test(scanId)) fields.scan_id = 'Invalid check-in identifier.';
+  if (deviceId.length < 2 || deviceId.length > 100) fields.device_id = 'Invalid scanner identifier.';
+  if (Number.isNaN(scannedAt.valueOf())) fields.scanned_at_device = 'Invalid check-in time.';
+  if (Object.keys(fields).length) throw errors.validation(fields);
+  return { registrationId, eventDayId, scanId, deviceId, scannedAt: scannedAt.toISOString() };
+}
+
+export async function checkInManually(db, body) {
+  const input = validateManualCheckIn(body);
+  const result = await callRpc(db, 'check_in_registration_manual', {
+    p_registration_id: input.registrationId,
+    p_event_day_id: input.eventDayId,
+    p_scan_id: input.scanId,
+    p_device_id: input.deviceId,
+    p_scanned_at_device: input.scannedAt,
+  });
+  if (!['CHECKED_IN', 'ALREADY_CHECKED_IN'].includes(result?.status) || !result.attendee_id) return result;
+  const attendees = await runQuery(db.from('attendees').select('email').eq('id', result.attendee_id).limit(1));
+  return { ...result, email: attendees[0]?.email || '' };
+}
+
 // A mis-scan, a test scan during setup, or the wrong card: the row has to be removable so the
 // person returns to Pending and can be scanned again.
 export async function deleteAttendance(db, body = {}) {
@@ -132,6 +162,22 @@ export async function loadAttendance(db, dayId) {
       pending: confirmed.filter((row) => row.attendance_status === 'pending').length,
       inactive: rows.length - confirmed.length,
     },
+  };
+}
+
+export async function listManualAttendanceCandidates(db, dayId) {
+  const data = await loadAttendance(db, dayId);
+  return {
+    day: data.day,
+    attendees: data.rows
+      .filter((row) => row.registration_status === 'confirmed')
+      .map((row) => ({
+        registration_id: row.registration_id,
+        name: row.name,
+        designation: row.designation,
+        organisation: row.organisation,
+        attendance_status: row.attendance_status,
+      })),
   };
 }
 

@@ -3,9 +3,12 @@ import { escapeHtml } from '/shared/form-logic.js';
 import { EVENT_TIME_ZONE } from '/shared/constants.js';
 
 const $ = (selector) => document.querySelector(selector);
+const DEFAULT_ATTENDANCE_DATE = '2026-11-04';
 let days = [];
 let scanner = null;
 let busy = false;
+let manualCandidates = [];
+let selectedManualRegistration = null;
 
 function randomId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -68,12 +71,61 @@ async function loadScanner() {
     return;
   }
   const openDays = days.filter((day) => day.scan_enabled);
-  const selectable = openDays.length ? openDays : days;
+  let selectable = openDays.length ? openDays : days;
+  const preferredDay = days.find((day) => day.event_date === DEFAULT_ATTENDANCE_DATE && day.scan_enabled)
+    ?? days.find((day) => day.event_date === DEFAULT_ATTENDANCE_DATE);
+  if (preferredDay && !selectable.some((day) => day.id === preferredDay.id)) {
+    selectable = [preferredDay, ...selectable];
+  }
   $('#event-day').innerHTML = selectable.map((day) =>
     `<option value="${escapeHtml(day.id)}">${escapeHtml(day.event.name)} · ${escapeHtml(day.label)} · ${formatDate(day.event_date)}</option>`).join('');
+  if (preferredDay) $('#event-day').value = preferredDay.id;
   $('#scan-panel').hidden = false;
   showError(openDays.length ? '' : 'No event is open. Scans will be rejected until an event is opened.');
+  await loadManualCandidates();
   startScanner();
+}
+
+function resetManualSearch() {
+  selectedManualRegistration = null;
+  $('#manual-name').value = '';
+  $('#manual-submit').disabled = true;
+  $('#manual-results').hidden = true;
+  $('#manual-name').setAttribute('aria-expanded', 'false');
+}
+
+async function loadManualCandidates() {
+  const day = selectedDay();
+  manualCandidates = [];
+  resetManualSearch();
+  if (!day) return;
+  const result = await api(`/api/admin/attendance/attendees?event_day_id=${encodeURIComponent(day.id)}`);
+  manualCandidates = result.attendees;
+}
+
+function renderManualMatches() {
+  selectedManualRegistration = null;
+  $('#manual-submit').disabled = true;
+  const results = $('#manual-results');
+  const query = $('#manual-name').value.trim().toLocaleLowerCase();
+  if (!query) {
+    results.hidden = true;
+    $('#manual-name').setAttribute('aria-expanded', 'false');
+    return;
+  }
+  const matches = manualCandidates
+    .filter((item) => `${item.name} ${item.designation} ${item.organisation}`.toLocaleLowerCase().includes(query))
+    .sort((a, b) => (a.attendance_status === b.attendance_status ? a.name.localeCompare(b.name)
+      : a.attendance_status === 'pending' ? -1 : 1))
+    .slice(0, 8);
+  results.innerHTML = matches.length ? matches.map((item) => `
+    <button type="button" role="option" data-manual-registration="${escapeHtml(item.registration_id)}">
+      <strong>${escapeHtml(item.name)}</strong>
+      <span>${escapeHtml(item.designation || item.organisation || 'No details')}</span>
+      <small>${escapeHtml(item.organisation || '')}${item.attendance_status === 'present' ? ' / Already present' : ''}</small>
+    </button>`).join('') : '<p class="muted">No attendee found.</p>';
+  results.hidden = false;
+  $('#manual-name').setAttribute('aria-expanded', 'true');
 }
 
 async function stopScanner() {
@@ -89,7 +141,7 @@ async function startScanner() {
   $('#scan-panel').hidden = false;
   busy = false;
   if (!window.Html5QrcodeScanner) {
-    showError('QR scanner could not load. Refresh the page or use the manual code.');
+    showError('QR scanner could not load. Refresh the page or use attendee name search.');
     return;
   }
   scanner = new window.Html5QrcodeScanner('qr-reader', {
@@ -130,6 +182,42 @@ function renderResult(result) {
   panel.hidden = false;
   $('#scan-next').addEventListener('click', startScanner);
   if (navigator.vibrate) navigator.vibrate(kind === 'good' ? 120 : [100, 80, 100]);
+}
+
+async function submitManualCheckIn(registrationId) {
+  if (busy) return;
+  if (!navigator.onLine) { showError('You are offline. Reconnect before checking in.'); return; }
+  const day = selectedDay();
+  if (!day) { showError('Choose an event day.'); return; }
+  busy = true;
+  showError('');
+  await stopScanner();
+  try {
+    const result = await api('/api/admin/attendance/check-in-manual', {
+      method: 'POST',
+      body: {
+        registration_id: registrationId,
+        event_day_id: day.id,
+        scan_id: randomId(),
+        device_id: deviceId(),
+        scanned_at_device: new Date().toISOString(),
+      },
+    });
+    const candidate = manualCandidates.find((item) => item.registration_id === registrationId);
+    if (candidate && ['CHECKED_IN', 'ALREADY_CHECKED_IN'].includes(result.status)) {
+      candidate.attendance_status = 'present';
+    }
+    resetManualSearch();
+    renderResult(result);
+  } catch (error) {
+    busy = false;
+    if (error.status === 401) showLogin('Your session expired. Log in again.');
+    else {
+      showError(error.message);
+      $('#scan-panel').hidden = false;
+      startScanner();
+    }
+  }
 }
 
 function credentialFromScan(value) {
@@ -188,13 +276,32 @@ $('#scanner-login-form').addEventListener('submit', async (event) => {
 
 $('#manual-form').addEventListener('submit', (event) => {
   event.preventDefault();
-  const value = $('#manual-code').value.trim();
-  if (!value) { showError('Enter the fallback code printed below the QR.'); return; }
-  $('#manual-code').value = '';
-  submitScan(value);
+  if (!selectedManualRegistration) { showError('Search for and select an attendee.'); return; }
+  submitManualCheckIn(selectedManualRegistration);
 });
 
-$('#event-day').addEventListener('change', startScanner);
+$('#manual-name').addEventListener('input', renderManualMatches);
+$('#manual-results').addEventListener('click', (event) => {
+  const option = event.target.closest('[data-manual-registration]');
+  if (!option) return;
+  const candidate = manualCandidates.find((item) => item.registration_id === option.dataset.manualRegistration);
+  if (!candidate) return;
+  selectedManualRegistration = candidate.registration_id;
+  $('#manual-name').value = candidate.name;
+  $('#manual-submit').disabled = false;
+  $('#manual-results').hidden = true;
+  $('#manual-name').setAttribute('aria-expanded', 'false');
+  showError('');
+});
+
+$('#event-day').addEventListener('change', async () => {
+  try {
+    await loadManualCandidates();
+    await startScanner();
+  } catch (error) {
+    showError(error.message);
+  }
+});
 $('#scanner-logout').addEventListener('click', async () => {
   await api('/api/admin/logout', { method: 'POST' }).catch(() => {});
   showLogin();

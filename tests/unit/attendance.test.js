@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AppError } from '../../src/errors.js';
 import {
-  attendanceFilename, buildAttendanceWorkbook, checkIn, mapAttendanceRows, validateScan,
+  attendanceFilename, buildAttendanceWorkbook, checkIn, checkInManually, mapAttendanceRows,
+  validateManualCheckIn, validateScan,
 } from '../../src/services/attendance.js';
 import { scannedCredentialHash } from '../../src/services/credential.js';
 import { fakeDb } from '../helpers/fake-db.js';
@@ -30,6 +31,29 @@ test('scan input is validated and manual fallback codes are normalised before th
 
 test('bad scan payloads fail before touching the database', () => {
   assert.throws(() => validateScan({ credential: 'x' }), (error) => error instanceof AppError && error.status === 400);
+});
+
+test('manual attendee check-in validates IDs and uses the separate RPC', async () => {
+  const registrationId = '33333333-3333-4333-8333-333333333333';
+  const db = fakeDb({
+    rpc: { check_in_registration_manual: () => ({ data: { status: 'CHECKED_IN', attendee_id: 'a1' }, error: null }) },
+    tables: { attendees: { data: [{ email: 'amina@example.com' }], error: null } },
+  });
+  const result = await checkInManually(db, {
+    registration_id: registrationId, event_day_id: DAY_ID, scan_id: SCAN_ID,
+    device_id: ' phone-1 ', scanned_at_device: '2026-11-04T04:00:00.000Z',
+  });
+  assert.equal(result.email, 'amina@example.com');
+  const call = db.calls.find((item) => item.fn === 'check_in_registration_manual');
+  assert.deepEqual(call.args, {
+    p_registration_id: registrationId,
+    p_event_day_id: DAY_ID,
+    p_scan_id: SCAN_ID,
+    p_device_id: 'phone-1',
+    p_scanned_at_device: '2026-11-04T04:00:00.000Z',
+  });
+  assert.throws(() => validateManualCheckIn({ registration_id: 'bad' }),
+    (error) => error instanceof AppError && error.status === 400);
 });
 
 test('attendance adapter combines people, organisation snapshots and scans', () => {

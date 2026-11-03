@@ -13,8 +13,8 @@ import {
   prepareQrPdfStream, qrPdfFilename, qrPngFilename, qrZipFilename,
 } from '../services/qr.js';
 import {
-  attendanceFilename, buildAttendanceWorkbook, checkIn, deleteAttendance, listAttendanceDays,
-  loadAttendance,
+  attendanceFilename, buildAttendanceWorkbook, checkIn, checkInManually, deleteAttendance,
+  listAttendanceDays, listManualAttendanceCandidates, loadAttendance,
 } from '../services/attendance.js';
 import {
   buildQuestionsWorkbook, deleteQuestion, loadQuestions, questionsFilename,
@@ -134,6 +134,18 @@ export function adminRoutes({ db, config, loginDelayMs }) {
 
   router.post('/attendance/check-in', async (req, res) => {
     const result = await checkIn(db, req.body);
+    res.set('Cache-Control', 'no-store');
+    res.json(result);
+  });
+
+  router.get('/attendance/attendees', async (req, res) => {
+    const result = await listManualAttendanceCandidates(db, req.query.event_day_id);
+    res.set('Cache-Control', 'no-store');
+    res.json(result);
+  });
+
+  router.post('/attendance/check-in-manual', async (req, res) => {
+    const result = await checkInManually(db, req.body);
     res.set('Cache-Control', 'no-store');
     res.json(result);
   });

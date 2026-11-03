@@ -32,6 +32,8 @@ const protectedRoutes = [
   ['get', `/api/admin/attendance?event_day_id=${PERSON_ID}`],
   ['get', `/api/admin/attendance/export?event_day_id=${PERSON_ID}`],
   ['post', '/api/admin/attendance/check-in'],
+  ['get', `/api/admin/attendance/attendees?event_day_id=${PERSON_ID}`],
+  ['post', '/api/admin/attendance/check-in-manual'],
   ['delete', '/api/admin/attendance'],
   ['post', '/api/admin/organisations/1/approve'],
   ['post', '/api/admin/organisations/1/merge'],
@@ -117,6 +119,44 @@ test('GET /attendance-days returns scanner choices without caching', async () =>
   assert.equal(res.status, 200);
   assert.equal(res.headers['cache-control'], 'no-store');
   assert.equal(res.body.days[0].scan_enabled, true);
+});
+
+test('manual attendance lists names and checks in the selected registration', async () => {
+  const registrationId = '22222222-2222-4222-8222-222222222222';
+  const db = fakeDb({
+    tables: {
+      event_days: { data: [{
+        id: PERSON_ID, event_id: PERSON_ID, event_date: '2026-11-04', label: 'Day 1',
+        events: { id: PERSON_ID, code: 'demo', name: 'Demo', status: 'open', timezone: 'Asia/Dhaka' },
+      }], error: null },
+      event_registrations: { data: [{
+        id: registrationId, status: 'confirmed',
+        attendees: { id: 'a1', name: 'Amina', designation: 'Manager', organisation_name: null },
+        registration_orgs: [{ kind: 'factory', name: 'Factory One' }],
+      }], error: null },
+      attendance: { data: [], error: null },
+      attendees: { data: [{ email: 'amina@example.com' }], error: null },
+    },
+    rpc: { check_in_registration_manual: () => ({ data: {
+      status: 'CHECKED_IN', attendee_id: 'a1', name: 'Amina',
+    }, error: null }) },
+  });
+  const list = await request(appWith(db))
+    .get(`/api/admin/attendance/attendees?event_day_id=${PERSON_ID}`).set('Cookie', validCookie());
+  assert.equal(list.status, 200);
+  assert.equal(list.body.attendees[0].name, 'Amina');
+
+  const checked = await request(appWith(db)).post('/api/admin/attendance/check-in-manual')
+    .set('Cookie', validCookie()).send({
+      registration_id: registrationId,
+      event_day_id: PERSON_ID,
+      scan_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      device_id: 'scanner-phone',
+      scanned_at_device: '2026-11-04T04:00:00Z',
+    });
+  assert.equal(checked.status, 200);
+  assert.equal(checked.body.name, 'Amina');
+  assert.ok(db.calls.some((call) => call.fn === 'check_in_registration_manual'));
 });
 
 test('selected QR downloads reject empty, duplicate, or malformed registration ids', async () => {

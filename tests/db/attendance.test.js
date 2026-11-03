@@ -52,6 +52,21 @@ describe('credentials and attendance', { skip: skipReason }, () => {
     assert.equal((await check(db.from('attendance').select('id'))).length, 2);
   });
 
+  test('manual name selection checks in the selected registration without a credential', async () => {
+    const result = await check(db.rpc('check_in_registration_manual', {
+      p_registration_id: fixture.registration.id,
+      p_event_day_id: fixture.days[0].id,
+      p_scan_id: randomUUID(),
+      p_device_id: 'manual-test',
+      p_scanned_at_device: new Date().toISOString(),
+    }));
+    assert.equal(result.status, 'CHECKED_IN');
+    assert.equal(result.registration_id, fixture.registration.id);
+    const [row] = await check(db.from('attendance')
+      .select('source').eq('registration_id', fixture.registration.id));
+    assert.equal(row.source, 'manual');
+  });
+
   test('a registration credential cannot be rotated', async () => {
     const replacement = createCredential();
     const { error } = await db.rpc('issue_registration_credential', {
