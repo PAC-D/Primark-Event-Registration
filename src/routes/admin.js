@@ -19,6 +19,9 @@ import {
 import {
   buildQuestionsWorkbook, deleteQuestion, loadQuestions, questionsFilename,
 } from '../services/questions.js';
+import {
+  previewCredentialRecovery, restoreDistributedCredential,
+} from '../services/credential-recovery.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -110,6 +113,18 @@ export function adminRoutes({ db, config, loginDelayMs }) {
     if (!result) throw errors.notFound();
     res.set('Cache-Control', 'no-store');
     res.json(result);
+  });
+
+  router.post('/qr-recovery/lookup', async (req, res) => {
+    const result = await previewCredentialRecovery(db, req.body?.current_url, qrBaseUrl(req));
+    res.set('Cache-Control', 'no-store');
+    res.json(result);
+  });
+
+  router.post('/qr-recovery/restore', async (req, res) => {
+    const result = await restoreDistributedCredential(db, req.body, qrBaseUrl(req));
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, ...result });
   });
 
   router.get('/attendance-days', async (_req, res) => {

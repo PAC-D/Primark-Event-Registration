@@ -61,6 +61,10 @@ export function fromDbError(error) {
     }
     case 'IMMUTABLE_CREDENTIAL':
       return errors.conflict('This registration already has a permanent QR credential.');
+    case 'CREDENTIAL_COLLISION':
+      return errors.conflict('That distributed QR is already assigned to another attendee.');
+    case 'SAME_CREDENTIAL':
+      return errors.validation({ distributed_url: 'The distributed URL is already active.' });
     default: {
       // supabase-js reports network failures with an empty code.
       if (!error?.code || RETRYABLE_PG_CODES.has(error.code)) {

@@ -27,6 +27,15 @@ test('IMMUTABLE_CREDENTIAL becomes a permanent-QR conflict', () => {
   assert.equal(err.message, 'This registration already has a permanent QR credential.');
 });
 
+test('emergency credential recovery errors are safe and specific', () => {
+  const collision = fromDbError(dbError('CREDENTIAL_COLLISION'));
+  assert.equal(collision.status, 409);
+  assert.match(collision.message, /already assigned/);
+  const same = fromDbError(dbError('SAME_CREDENTIAL'));
+  assert.equal(same.status, 400);
+  assert.deepEqual(same.extra.fields, { distributed_url: 'The distributed URL is already active.' });
+});
+
 test('MERGE_OVER_LIMIT becomes 409 with the projected count and per-kind limit', () => {
   const err = fromDbError(dbError('MERGE_OVER_LIMIT', JSON.stringify({ target: 'PADMA TEXTILES LTD', side: 'supplier', count: 3 })));
   assert.equal(err.status, 409);

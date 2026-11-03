@@ -61,6 +61,14 @@ export const BACKUP_TABLES = [
     order: ['registration_id', 'issued_at'],
   },
   {
+    name: 'credential_recovery_log',
+    columns: [
+      'id', 'credential_id', 'registration_id', 'previous_token_hash',
+      'distributed_token_hash', 'restored_at',
+    ],
+    order: ['restored_at', 'id'],
+  },
+  {
     name: 'attendance',
     columns: ['id', 'registration_id', 'event_day_id', 'first_scanned_at', 'scanned_at_device', 'received_at', 'device_id', 'scan_id', 'source'],
     order: ['event_day_id', 'first_scanned_at'],

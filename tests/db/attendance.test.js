@@ -66,6 +66,27 @@ describe('credentials and attendance', { skip: skipReason }, () => {
     assert.deepEqual(credentials.map((row) => row.status), ['active']);
   });
 
+  test('emergency recovery restores a distributed token on the same credential UUID', async () => {
+    const distributed = createCredential();
+    const [before] = await check(db.from('registration_credentials')
+      .select('id').eq('registration_id', fixture.registration.id));
+    const restoredRegistrationId = await check(db.rpc('restore_distributed_credential', {
+      p_current_token_hash: fixture.credential.tokenHash,
+      p_distributed_token_hash: distributed.tokenHash,
+      p_distributed_token: distributed.token,
+    }));
+    assert.equal(restoredRegistrationId, fixture.registration.id);
+    const [after] = await check(db.from('registration_credentials')
+      .select('id, token_hash, print_token').eq('registration_id', fixture.registration.id));
+    assert.equal(after.id, before.id);
+    assert.equal(after.token_hash, distributed.tokenHash);
+    assert.equal(after.print_token, distributed.token);
+    assert.equal((await check(scan(fixture.credential.tokenHash, fixture.days[0].id))).status, 'INVALID');
+    assert.equal((await check(scan(distributed.tokenHash, fixture.days[0].id))).status, 'CHECKED_IN');
+    const logs = await check(db.from('credential_recovery_log').select('credential_id, registration_id'));
+    assert.deepEqual(logs, [{ credential_id: before.id, registration_id: fixture.registration.id }]);
+  });
+
   test('print preparation cannot replace a hash-only credential', async () => {
     const first = createCredential();
     const prepare = (credential) => db.rpc('prepare_event_credentials', {

@@ -26,6 +26,8 @@ const protectedRoutes = [
   ['post', `/api/admin/events/${PERSON_ID}/qrs.pdf`],
   ['post', `/api/admin/events/${PERSON_ID}/qrs.zip`],
   ['post', `/api/admin/events/${PERSON_ID}/qr.png`],
+  ['post', '/api/admin/qr-recovery/lookup'],
+  ['post', '/api/admin/qr-recovery/restore'],
   ['get', '/api/admin/attendance-days'],
   ['get', `/api/admin/attendance?event_day_id=${PERSON_ID}`],
   ['get', `/api/admin/attendance/export?event_day_id=${PERSON_ID}`],
@@ -387,4 +389,43 @@ test('DELETE /questions reports NOT_FOUND when the question is already gone', as
   const res = await request(appWith(db)).delete(`/api/admin/questions/${PERSON_ID}`).set('Cookie', validCookie());
   assert.equal(res.status, 404);
   assert.ok(db.calls.some((call) => call.fn === 'delete_session_question'));
+});
+
+test('emergency QR recovery previews the current attendee then restores through the guarded RPC', async () => {
+  const current = 'ER1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const distributed = 'ER1.BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+  const registrationId = '22222222-2222-4222-8222-222222222222';
+  const db = fakeDb({
+    tables: {
+      registration_credentials: { data: [{ id: 'credential-1', registration_id: registrationId, status: 'active' }], error: null },
+      event_registrations: { data: [{
+        id: registrationId, event_id: PERSON_ID, attendee_id: 'attendee-1', status: 'confirmed',
+      }], error: null },
+      attendees: { data: [{
+        id: 'attendee-1', name: 'Emergency User', email: 'user@example.com', phone: '1234567',
+        designation: 'Manager', from_type: 'factory', organisation_name: null,
+      }], error: null },
+      events: { data: [{ id: PERSON_ID, code: 'event', name: 'Event' }], error: null },
+      registration_orgs: { data: [{ kind: 'factory', name: 'Factory One' }], error: null },
+    },
+    rpc: { restore_distributed_credential: () => ({ data: registrationId, error: null }) },
+  });
+  const app = createApp({
+    db,
+    config: { ...testConfig, publicBaseUrl: 'https://registration.example.com' },
+    loginDelayMs: 0,
+  });
+  const full = (token) => `https://registration.example.com/verify.html#${token}`;
+  const preview = await request(app).post('/api/admin/qr-recovery/lookup')
+    .set('Cookie', validCookie()).send({ current_url: full(current) });
+  assert.equal(preview.status, 200);
+  assert.equal(preview.body.attendee.name, 'Emergency User');
+
+  const restored = await request(app).post('/api/admin/qr-recovery/restore')
+    .set('Cookie', validCookie()).send({
+      current_url: full(current), distributed_url: full(distributed),
+    });
+  assert.equal(restored.status, 200);
+  assert.equal(restored.body.ok, true);
+  assert.ok(db.calls.some((call) => call.fn === 'restore_distributed_credential'));
 });
