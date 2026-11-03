@@ -762,6 +762,13 @@ fieldset.field-invalid .radios label { border-color: var(--danger-fill); box-sha
 .qr-recovery-body > p.muted { margin: 0 0 10px; font-size: 0.85rem; }
 .qr-recovery-body .field { margin-bottom: 8px; }
 .qr-recovery-body .btn { min-height: 40px; }
+.qr-recovery-attendee-field { position: relative; }
+.qr-recovery-results { position: absolute; z-index: 6; top: 100%; left: 0; right: 0; max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-control); background: #fff; box-shadow: var(--shadow-glass); }
+.qr-recovery-results button { display: grid; width: 100%; gap: 1px; padding: 9px 11px; border: 0; border-bottom: 1px solid var(--line); color: var(--ink-2); background: #fff; font: inherit; text-align: left; cursor: pointer; }
+.qr-recovery-results button:last-child { border-bottom: 0; }
+.qr-recovery-results button:hover, .qr-recovery-results button:focus-visible { background: var(--info-soft); outline: none; }
+.qr-recovery-results small { color: var(--muted); }
+.qr-recovery-results p { margin: 0; padding: 12px; text-align: center; }
 .qr-recovery-message { margin: 10px 0 0; }
 .qr-recovery-message.is-success { color: var(--ok); background: var(--ok-soft); border-color: #abefc6; }
 .qr-recovery-person { display: grid; gap: 1px; margin: 10px 0; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }

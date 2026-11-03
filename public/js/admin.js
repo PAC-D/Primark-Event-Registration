@@ -721,18 +721,18 @@ async function openQrs() {
     <details class="qr-recovery">
       <summary>Emergency QR recovery</summary>
       <div class="qr-recovery-body">
-        <p class="muted">Restore a distributed QR without changing the attendee or credential UUID.</p>
-        <div class="field">
-          <label for="qr-recovery-current">1. Current full QR URL</label>
-          <input id="qr-recovery-current" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false"
-            placeholder="https://registration.pac-d.com/verify.html#ER1...">
+        <p class="muted">Select an attendee, then restore their distributed QR without changing any UUID.</p>
+        <div class="field qr-recovery-attendee-field">
+          <label for="qr-recovery-name">Attendee name</label>
+          <input id="qr-recovery-name" type="search" autocomplete="off" autocapitalize="words" spellcheck="false"
+            placeholder="Type a name..." role="combobox" aria-autocomplete="list" aria-controls="qr-recovery-results" aria-expanded="false">
+          <div id="qr-recovery-results" class="qr-recovery-results" role="listbox" hidden></div>
         </div>
-        <button type="button" class="btn" id="qr-recovery-find">Find attendee</button>
         <p class="alert qr-recovery-message" id="qr-recovery-message" role="alert" hidden></p>
         <div id="qr-recovery-match" hidden>
           <div class="qr-recovery-person" id="qr-recovery-person"></div>
           <div class="field">
-            <label for="qr-recovery-distributed">2. Distributed full QR URL</label>
+            <label for="qr-recovery-distributed">Old distributed full QR URL</label>
             <input id="qr-recovery-distributed" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false"
               placeholder="https://registration.pac-d.com/verify.html#ER1...">
           </div>
@@ -751,7 +751,7 @@ async function openQrs() {
     <section id="qr-preview" hidden></section>`);
   let registrations = [];
   const selected = new Set();
-  let recoveryCurrentUrl = '';
+  let recoveryRegistrationId = '';
 
   const recoveryMessage = (message, success = false) => {
     const box = $('#qr-recovery-message');
@@ -760,41 +760,47 @@ async function openQrs() {
     box.classList.toggle('is-success', success);
   };
   const clearRecoveryMatch = () => {
-    recoveryCurrentUrl = '';
+    recoveryRegistrationId = '';
     $('#qr-recovery-match').hidden = true;
-    $('#qr-recovery-message').hidden = true;
-    $('#qr-recovery-message').classList.remove('is-success');
+    $('#qr-recovery-results').hidden = true;
+    $('#qr-recovery-name').setAttribute('aria-expanded', 'false');
   };
 
-  $('#qr-recovery-current').addEventListener('input', clearRecoveryMatch);
-  $('#qr-recovery-find').addEventListener('click', async () => {
-    const button = $('#qr-recovery-find');
-    button.disabled = true;
-    button.textContent = 'Checking...';
-    try {
-      const currentUrl = $('#qr-recovery-current').value.trim();
-      const result = await api('/api/admin/qr-recovery/lookup', {
-        method: 'POST', body: { current_url: currentUrl },
-      });
-      recoveryCurrentUrl = currentUrl;
-      const orgs = result.attendee.from_type === 'other'
-        ? result.attendee.organisation_name
-        : result.organisations.map((item) => item.name).join(', ');
-      $('#qr-recovery-person').innerHTML = `
-        <strong>${escapeHtml(result.attendee.name || 'Unnamed attendee')}</strong>
-        <span>${escapeHtml(result.attendee.email || 'No email')}</span>
-        <small>${escapeHtml([orgs, result.event?.name].filter(Boolean).join(' / '))}</small>`;
-      $('#qr-recovery-match').hidden = false;
-      $('#qr-recovery-distributed').value = '';
-      $('#qr-recovery-distributed').focus();
-      recoveryMessage('Attendee found. Confirm the details, then paste the distributed URL.', true);
-    } catch (error) {
-      clearRecoveryMatch();
-      recoveryMessage(error.message);
-    } finally {
-      button.disabled = false;
-      button.textContent = 'Find attendee';
-    }
+  $('#qr-recovery-name').addEventListener('input', () => {
+    clearRecoveryMatch();
+    $('#qr-recovery-message').hidden = true;
+    $('#qr-recovery-message').classList.remove('is-success');
+    const query = $('#qr-recovery-name').value.trim().toLocaleLowerCase();
+    if (!query) return;
+    const matches = registrations
+      .filter((item) => `${item.name} ${item.company}`.toLocaleLowerCase().includes(query))
+      .slice(0, 8);
+    const results = $('#qr-recovery-results');
+    results.innerHTML = matches.length ? matches.map((item) => `
+      <button type="button" role="option" data-recovery-registration="${escapeHtml(item.id)}">
+        <strong>${escapeHtml(item.name)}</strong>
+        <small>${escapeHtml(item.company || 'No organisation')}</small>
+      </button>`).join('') : '<p class="muted">No attendee found in this event.</p>';
+    results.hidden = false;
+    $('#qr-recovery-name').setAttribute('aria-expanded', 'true');
+  });
+
+  $('#qr-recovery-results').addEventListener('click', (event) => {
+    const option = event.target.closest('[data-recovery-registration]');
+    if (!option) return;
+    const registration = registrations.find((item) => item.id === option.dataset.recoveryRegistration);
+    if (!registration) return;
+    recoveryRegistrationId = registration.id;
+    $('#qr-recovery-name').value = registration.name;
+    $('#qr-recovery-name').setAttribute('aria-expanded', 'false');
+    $('#qr-recovery-results').hidden = true;
+    $('#qr-recovery-person').innerHTML = `
+      <strong>${escapeHtml(registration.name)}</strong>
+      <small>${escapeHtml(registration.company || 'No organisation')}</small>`;
+    $('#qr-recovery-match').hidden = false;
+    $('#qr-recovery-distributed').value = '';
+    $('#qr-recovery-distributed').focus();
+    recoveryMessage('Attendee selected. Paste the old distributed QR URL.', true);
   });
 
   $('#qr-recovery-restore').addEventListener('click', async () => {
@@ -812,11 +818,11 @@ async function openQrs() {
     try {
       const result = await api('/api/admin/qr-recovery/restore', {
         method: 'POST',
-        body: { current_url: recoveryCurrentUrl, distributed_url: distributedUrl },
+        body: { registration_id: recoveryRegistrationId, distributed_url: distributedUrl },
       });
-      $('#qr-recovery-current').value = distributedUrl;
+      $('#qr-recovery-name').value = '';
       $('#qr-recovery-distributed').value = '';
-      recoveryCurrentUrl = distributedUrl;
+      recoveryRegistrationId = '';
       recoveryMessage(`Restored successfully for ${result.attendee.name}. The distributed QR is active.`, true);
       $('#qr-recovery-match').hidden = true;
     } catch (error) {
@@ -855,6 +861,9 @@ async function openQrs() {
 
   const loadChoices = async () => {
     selected.clear();
+    clearRecoveryMatch();
+    $('#qr-recovery-name').value = '';
+    $('#qr-recovery-message').hidden = true;
     $('#qr-selection').innerHTML = '<p class="muted empty">Loading attendees…</p>';
     const result = await api(`/api/admin/events/${$('#qr-event').value}/qr-registrations`);
     registrations = result.registrations;

@@ -18,6 +18,7 @@ function recoveryDb() {
     tables: {
       registration_credentials: { data: [{
         id: 'credential-1', registration_id: registrationId, status: 'active',
+        token_hash: credentialHash(CURRENT),
       }], error: null },
       event_registrations: { data: [{
         id: registrationId,
@@ -61,7 +62,7 @@ test('current QR preview returns the linked attendee details', async () => {
 test('recovery sends exact current and distributed hashes to the guarded RPC', async () => {
   const db = recoveryDb();
   const result = await restoreDistributedCredential(db, {
-    current_url: currentUrl,
+    registration_id: registrationId,
     distributed_url: distributedUrl,
   }, BASE_URL);
   const rpc = db.calls.find((call) => call.fn === 'restore_distributed_credential');
@@ -76,9 +77,19 @@ test('recovery sends exact current and distributed hashes to the guarded RPC', a
 test('recovery rejects using the current URL as the distributed URL', async () => {
   await assert.rejects(
     restoreDistributedCredential(recoveryDb(), {
-      current_url: currentUrl,
+      registration_id: registrationId,
       distributed_url: currentUrl,
     }, BASE_URL),
     (error) => error.code === 'VALIDATION' && Boolean(error.extra.fields.distributed_url),
+  );
+});
+
+test('recovery requires an attendee selected from the name search', async () => {
+  await assert.rejects(
+    restoreDistributedCredential(recoveryDb(), {
+      registration_id: 'not-selected',
+      distributed_url: distributedUrl,
+    }, BASE_URL),
+    (error) => error.code === 'VALIDATION' && Boolean(error.extra.fields.registration_id),
   );
 });

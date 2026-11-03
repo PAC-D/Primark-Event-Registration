@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import request from 'supertest';
 import { createApp } from '../../src/create-app.js';
 import { COOKIE_NAME, SESSION_SECONDS, signSession } from '../../src/auth.js';
+import { credentialHash } from '../../src/services/credential.js';
 import { fakeDb, testConfig } from '../helpers/fake-db.js';
 import { fixtureAttendees, fixtureOrgs } from '../helpers/dashboard-fixture.js';
 
@@ -431,13 +432,16 @@ test('DELETE /questions reports NOT_FOUND when the question is already gone', as
   assert.ok(db.calls.some((call) => call.fn === 'delete_session_question'));
 });
 
-test('emergency QR recovery previews the current attendee then restores through the guarded RPC', async () => {
+test('emergency QR recovery restores a selected attendee without requiring their current URL', async () => {
   const current = 'ER1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
   const distributed = 'ER1.BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
   const registrationId = '22222222-2222-4222-8222-222222222222';
   const db = fakeDb({
     tables: {
-      registration_credentials: { data: [{ id: 'credential-1', registration_id: registrationId, status: 'active' }], error: null },
+      registration_credentials: { data: [{
+        id: 'credential-1', registration_id: registrationId, status: 'active',
+        token_hash: credentialHash(current),
+      }], error: null },
       event_registrations: { data: [{
         id: registrationId, event_id: PERSON_ID, attendee_id: 'attendee-1', status: 'confirmed',
       }], error: null },
@@ -456,14 +460,9 @@ test('emergency QR recovery previews the current attendee then restores through 
     loginDelayMs: 0,
   });
   const full = (token) => `https://registration.example.com/verify.html#${token}`;
-  const preview = await request(app).post('/api/admin/qr-recovery/lookup')
-    .set('Cookie', validCookie()).send({ current_url: full(current) });
-  assert.equal(preview.status, 200);
-  assert.equal(preview.body.attendee.name, 'Emergency User');
-
   const restored = await request(app).post('/api/admin/qr-recovery/restore')
     .set('Cookie', validCookie()).send({
-      current_url: full(current), distributed_url: full(distributed),
+      registration_id: registrationId, distributed_url: full(distributed),
     });
   assert.equal(restored.status, 200);
   assert.equal(restored.body.ok, true);

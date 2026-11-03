@@ -3,6 +3,7 @@ import { callRpc, runQuery } from '../db.js';
 import { errors } from '../errors.js';
 
 const TOKEN_RE = /^ER1\.[A-Za-z0-9_-]{32}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const one = (value) => (Array.isArray(value) ? value[0] : value);
 
 export function parseVerificationUrl(value, baseUrl, field = 'url') {
@@ -64,24 +65,37 @@ async function lookupToken(db, tokenHash) {
   };
 }
 
+async function lookupRegistration(db, registrationId) {
+  if (!UUID_RE.test(String(registrationId ?? ''))) {
+    throw errors.validation({ registration_id: 'Select an attendee from the search results.' });
+  }
+  const credentials = await runQuery(db.from('registration_credentials')
+    .select('id, registration_id, status, token_hash')
+    .eq('registration_id', registrationId)
+    .eq('status', 'active'));
+  const credential = credentials[0];
+  if (!credential) throw errors.notFound('No active QR was found for this attendee.');
+  return credential;
+}
+
 export async function previewCredentialRecovery(db, fullUrl, baseUrl) {
   const current = parseVerificationUrl(fullUrl, baseUrl, 'current_url');
   return lookupToken(db, current.tokenHash);
 }
 
 export async function restoreDistributedCredential(db, input, baseUrl) {
-  const current = parseVerificationUrl(input?.current_url, baseUrl, 'current_url');
   const distributed = parseVerificationUrl(input?.distributed_url, baseUrl, 'distributed_url');
-  if (current.tokenHash === distributed.tokenHash) {
+  const current = await lookupRegistration(db, input?.registration_id);
+  if (current.token_hash === distributed.tokenHash) {
     throw errors.validation({ distributed_url: 'The distributed URL must be different from the current URL.' });
   }
 
-  const preview = await lookupToken(db, current.tokenHash);
+  const preview = await lookupToken(db, current.token_hash);
   if (preview.registration_status !== 'confirmed') {
     throw errors.conflict('This attendee registration is not confirmed.');
   }
   const registrationId = await callRpc(db, 'restore_distributed_credential', {
-    p_current_token_hash: current.tokenHash,
+    p_current_token_hash: current.token_hash,
     p_distributed_token_hash: distributed.tokenHash,
     p_distributed_token: distributed.token,
   });
